@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Andiamo Tip Distribution</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="eyebrow">Tip Distribution</p>
+            <h1>Andiamo Trattoria</h1>
+            <p class="venue">Chippendale</p>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <a class="nav-item active" href="#weekly">Weekly Setup</a>
+          <a class="nav-item" href="#staff">Staff</a>
+          <a class="nav-item" href="#shifts">Shifts</a>
+          <a class="nav-item" href="#summary">Summary</a>
+          <a class="nav-item" href="#details">Details</a>
+          <a class="nav-item" href="review-tool.html">Review Tool</a>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Monday to Sunday reporting</p>
+            <h2>Weekly Tip Distribution</h2>
+          </div>
+          <div class="date-panel">
+            <span>Selected Week</span>
+            <strong id="weekRangeLabel">-</strong>
+          </div>
+        </header>
+
+        <section class="hero-band" aria-label="Weekly totals">
+          <div>
+            <p class="eyebrow">Total tips</p>
+            <strong id="heroTotalTips">$0.00</strong>
+            <span id="heroSplit">FOH 70% / BOH 30%</span>
+          </div>
+          <button id="exportExcel" class="primary-button" type="button">Export Excel</button>
+        </section>
+
+        <section id="weekly" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Step 1</p>
+              <h3>Weekly Setup</h3>
+            </div>
+          </div>
+
+          <form id="weekForm" class="form-grid">
+            <label>
+              Week starting Monday
+              <input id="weekStart" type="date" required />
+            </label>
+            <label>
+              Card/Tyro tips
+              <input id="cardTips" type="number" min="0" step="0.01" inputmode="decimal" />
+            </label>
+            <label>
+              Cash tips
+              <input id="cashTips" type="number" min="0" step="0.01" inputmode="decimal" />
+            </label>
+            <label>
+              FOH split %
+              <input id="fohSplit" type="number" min="0" max="100" step="0.01" />
+            </label>
+            <label>
+              BOH split %
+              <input id="bohSplit" type="number" min="0" max="100" step="0.01" />
+            </label>
+          </form>
+        </section>
+
+        <section class="content-grid">
+          <article id="staff" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Step 2</p>
+                <h3>Staff</h3>
+              </div>
+            </div>
+
+            <form id="staffForm" class="inline-form">
+              <label>
+                Staff name
+                <input id="staffName" type="text" autocomplete="off" placeholder="e.g. Sofia" required />
+              </label>
+              <button class="secondary-button" type="submit">Add Staff</button>
+            </form>
+
+            <div id="staffList" class="list-stack" aria-live="polite"></div>
+          </article>
+
+          <article id="shifts" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Step 3</p>
+                <h3>Add Shift</h3>
+              </div>
+            </div>
+
+            <form id="shiftForm" class="shift-form">
+              <label>
+                Date
+                <input id="shiftDate" type="date" required />
+              </label>
+              <label>
+                Staff
+                <select id="shiftStaff" required></select>
+              </label>
+              <label>
+                Area
+                <select id="shiftArea">
+                  <option value="FOH">FOH</option>
+                  <option value="BOH">BOH</option>
+                </select>
+              </label>
+
+              <div id="fohFields" class="conditional-fields">
+                <label>
+                  Role
+                  <select id="fohRole">
+                    <option value="Manager">Manager</option>
+                    <option value="Waiter">Waiter</option>
+                  </select>
+                </label>
+                <label>
+                  Shift level
+                  <select id="fohLevel">
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                  </select>
+                </label>
+                <label>
+                  Duration
+                  <select id="fohDuration">
+                    <option value="over">Over 7h</option>
+                    <option value="under">Under 7h</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="bohFields" class="conditional-fields hidden">
+                <label>
+                  Category
+                  <select id="bohCategory">
+                    <option value="Senior">Senior</option>
+                    <option value="Non-senior">Non-senior</option>
+                  </select>
+                </label>
+                <label>
+                  Duration
+                  <select id="bohDuration">
+                    <option value="full">Full</option>
+                    <option value="half">Half</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="points-preview">
+                <span>Calculated points</span>
+                <strong id="shiftPointsPreview">0</strong>
+              </div>
+              <button class="primary-action" type="submit">Add Shift</button>
+            </form>
+          </article>
+        </section>
+
+        <section id="summary" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Weekly report</p>
+              <h3>Summary</h3>
+            </div>
+          </div>
+
+          <div class="metric-grid" aria-label="Calculated totals">
+            <article class="metric-card">
+              <span>Card/Tyro Tips</span>
+              <strong id="summaryCard">$0.00</strong>
+            </article>
+            <article class="metric-card">
+              <span>Cash Tips</span>
+              <strong id="summaryCash">$0.00</strong>
+            </article>
+            <article class="metric-card">
+              <span>Total Tips</span>
+              <strong id="summaryTotal">$0.00</strong>
+            </article>
+            <article class="metric-card">
+              <span>FOH Pool</span>
+              <strong id="summaryFohPool">$0.00</strong>
+            </article>
+            <article class="metric-card">
+              <span>BOH Pool</span>
+              <strong id="summaryBohPool">$0.00</strong>
+            </article>
+            <article class="metric-card">
+              <span>Total Points</span>
+              <strong id="summaryPoints">0</strong>
+            </article>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Staff</th>
+                  <th>FOH points</th>
+                  <th>BOH points</th>
+                  <th>Total points</th>
+                  <th>Final payout</th>
+                </tr>
+              </thead>
+              <tbody id="staffSummaryBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="details" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Shift record</p>
+              <h3>Detailed Shifts</h3>
+            </div>
+          </div>
+
+          <div id="shiftList" class="shift-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

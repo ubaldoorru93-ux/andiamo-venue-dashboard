@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Andiamo Review Response Tool</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="eyebrow">Review Responses</p>
+            <h1>Andiamo Trattoria</h1>
+            <p class="venue">Chippendale</p>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <a class="nav-item active" href="review-tool.html">Review Tool</a>
+          <a class="nav-item" href="index.html">Tip Distribution</a>
+          <a class="nav-item" href="#history">History</a>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Google, TripAdvisor, Facebook</p>
+            <h2>Review Response Tool</h2>
+          </div>
+          <div class="date-panel">
+            <span>Saved Responses</span>
+            <strong id="historyCount">0</strong>
+          </div>
+        </header>
+
+        <section class="hero-band review-hero" aria-label="Response focus">
+          <div>
+            <p class="eyebrow">Andiamo Trattoria Chippendale</p>
+            <strong>Write polished guest replies</strong>
+            <span>Warm, varied, and natural Italian restaurant wording.</span>
+          </div>
+          <button id="clearForm" class="primary-button" type="button">Clear Form</button>
+        </section>
+
+        <section class="content-grid review-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Input</p>
+                <h3>Guest Review</h3>
+              </div>
+            </div>
+
+            <form id="reviewForm" class="review-form">
+              <label>
+                Customer name
+                <input id="customerName" type="text" autocomplete="off" placeholder="e.g. Olivia" required />
+              </label>
+              <label>
+                Rating
+                <select id="rating" required>
+                  <option value="5">5 stars</option>
+                  <option value="4">4 stars</option>
+                  <option value="3">3 stars</option>
+                  <option value="2">2 stars</option>
+                  <option value="1">1 star</option>
+                </select>
+              </label>
+              <label>
+                Platform
+                <select id="platform">
+                  <option value="Google">Google</option>
+                  <option value="TripAdvisor">TripAdvisor</option>
+                  <option value="Facebook">Facebook</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+              <label class="full-span">
+                Review text
+                <textarea id="reviewText" rows="8" placeholder="Paste the guest review here" required></textarea>
+              </label>
+              <button class="primary-action full-span" type="submit">Generate Responses</button>
+            </form>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Output</p>
+                <h3>Response Options</h3>
+              </div>
+            </div>
+            <div id="responseOutput" class="response-output">
+              <p class="empty-state">Enter a review to generate response options.</p>
+            </div>
+          </article>
+        </section>
+
+        <section id="history" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Local log</p>
+              <h3>History</h3>
+            </div>
+            <button id="clearHistory" class="secondary-button" type="button">Clear History</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="review-tool.js"></script>
+  </body>
+</html>
