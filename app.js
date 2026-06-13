@@ -100,12 +100,28 @@ function toDateInput(date) {
   return `${year}-${month}-${day}`;
 }
 
+function dollarsToCents(value) {
+  return Math.round((Number(value) || 0) * 100);
+}
+
+function centsToDollars(cents) {
+  return (Number(cents) || 0) / 100;
+}
+
 function money(value) {
-  return currency.format(roundCents(value));
+  return currency.format(centsToDollars(dollarsToCents(value)));
+}
+
+function moneyFromCents(cents) {
+  return currency.format(centsToDollars(cents));
+}
+
+function percentToBasisPoints(value) {
+  return Math.round((Number(value) || 0) * 100);
 }
 
 function roundCents(value) {
-  return Math.round((Number(value) || 0) * 100) / 100;
+  return centsToDollars(dollarsToCents(value));
 }
 
 function uid(prefix) {
@@ -141,13 +157,45 @@ function calculateShiftPoints(shift) {
   return getBohPoints(shift.bohCategory, shift.bohDuration);
 }
 
+function comparePayoutPriority(a, b, pointsKey) {
+  return b[pointsKey] - a[pointsKey] || a.name.localeCompare(b.name) || a.staffId.localeCompare(b.staffId);
+}
+
+function distributePoolCents(rows, poolCents, pointsKey, payoutKey) {
+  rows.forEach((row) => {
+    row[payoutKey] = 0;
+  });
+
+  const eligibleRows = rows.filter((row) => row[pointsKey] > 0);
+  const totalPoints = eligibleRows.reduce((sum, row) => sum + row[pointsKey], 0);
+  if (!poolCents || !totalPoints) return;
+
+  let distributedCents = 0;
+  eligibleRows.forEach((row) => {
+    const baseCents = Math.floor((poolCents * row[pointsKey]) / totalPoints);
+    row[payoutKey] = baseCents;
+    distributedCents += baseCents;
+  });
+
+  let leftoverCents = poolCents - distributedCents;
+  const priorityRows = [...eligibleRows].sort((a, b) => comparePayoutPriority(a, b, pointsKey));
+  let index = 0;
+  while (leftoverCents > 0) {
+    priorityRows[index % priorityRows.length][payoutKey] += 1;
+    leftoverCents -= 1;
+    index += 1;
+  }
+}
+
 function getCalculations() {
   const week = getCurrentWeek();
-  const cardTips = Number(week.cardTips) || 0;
-  const cashTips = Number(week.cashTips) || 0;
-  const totalTips = roundCents(cardTips + cashTips);
-  const fohPool = roundCents(totalTips * ((Number(week.fohSplit) || 0) / 100));
-  const bohPool = roundCents(totalTips * ((Number(week.bohSplit) || 0) / 100));
+  const cardTipsCents = dollarsToCents(week.cardTips);
+  const cashTipsCents = dollarsToCents(week.cashTips);
+  const totalTipsCents = cardTipsCents + cashTipsCents;
+  const fohSplitBasisPoints = percentToBasisPoints(week.fohSplit);
+  const bohSplitBasisPoints = percentToBasisPoints(week.bohSplit);
+  const fohPoolCents = Math.round((totalTipsCents * fohSplitBasisPoints) / 10000);
+  const bohPoolCents = totalTipsCents - fohPoolCents;
   const totals = new Map();
   let fohPoints = 0;
   let bohPoints = 0;
@@ -165,28 +213,44 @@ function getCalculations() {
     totals.set(shift.staffId, row);
   });
 
-  const staffRows = Array.from(totals.values())
-    .map((row) => {
-      const fohPay = fohPoints ? (row.fohPoints / fohPoints) * fohPool : 0;
-      const bohPay = bohPoints ? (row.bohPoints / bohPoints) * bohPool : 0;
-      return {
-        ...row,
-        name: getStaffName(row.staffId),
-        totalPoints: row.fohPoints + row.bohPoints,
-        payout: roundCents(fohPay + bohPay),
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const staffRows = Array.from(totals.values()).map((row) => ({
+    ...row,
+    name: getStaffName(row.staffId),
+    totalPoints: row.fohPoints + row.bohPoints,
+    fohPayoutCents: 0,
+    bohPayoutCents: 0,
+    payoutCents: 0,
+    payout: 0,
+  }));
+
+  distributePoolCents(staffRows, fohPoolCents, "fohPoints", "fohPayoutCents");
+  distributePoolCents(staffRows, bohPoolCents, "bohPoints", "bohPayoutCents");
+
+  staffRows.forEach((row) => {
+    row.payoutCents = row.fohPayoutCents + row.bohPayoutCents;
+    row.payout = centsToDollars(row.payoutCents);
+  });
+
+  staffRows.sort((a, b) => a.name.localeCompare(b.name));
 
   return {
-    cardTips,
-    cashTips,
-    totalTips,
-    fohPool,
-    bohPool,
+    cardTips: centsToDollars(cardTipsCents),
+    cashTips: centsToDollars(cashTipsCents),
+    totalTips: centsToDollars(totalTipsCents),
+    fohPool: centsToDollars(fohPoolCents),
+    bohPool: centsToDollars(bohPoolCents),
+    cardTipsCents,
+    cashTipsCents,
+    totalTipsCents,
+    fohPoolCents,
+    bohPoolCents,
+    fohSplitBasisPoints,
+    bohSplitBasisPoints,
     fohPoints,
     bohPoints,
     totalPoints: fohPoints + bohPoints,
+    hasUndistributedFoh: fohPoolCents > 0 && fohPoints === 0,
+    hasUndistributedBoh: bohPoolCents > 0 && bohPoints === 0,
     staffRows,
   };
 }
@@ -220,7 +284,7 @@ function render() {
   elements.cashTips.value = week.cashTips || "";
   elements.fohSplit.value = week.fohSplit;
   elements.bohSplit.value = week.bohSplit;
-  elements.heroTotalTips.textContent = money(calc.totalTips);
+  elements.heroTotalTips.textContent = moneyFromCents(calc.totalTipsCents);
   elements.heroSplit.textContent = `FOH ${week.fohSplit}% / BOH ${week.bohSplit}%`;
 
   renderStaff();
@@ -260,11 +324,11 @@ function renderShiftForm() {
 }
 
 function renderSummary(calc) {
-  elements.summaryCard.textContent = money(calc.cardTips);
-  elements.summaryCash.textContent = money(calc.cashTips);
-  elements.summaryTotal.textContent = money(calc.totalTips);
-  elements.summaryFohPool.textContent = money(calc.fohPool);
-  elements.summaryBohPool.textContent = money(calc.bohPool);
+  elements.summaryCard.textContent = moneyFromCents(calc.cardTipsCents);
+  elements.summaryCash.textContent = moneyFromCents(calc.cashTipsCents);
+  elements.summaryTotal.textContent = moneyFromCents(calc.totalTipsCents);
+  elements.summaryFohPool.textContent = moneyFromCents(calc.fohPoolCents);
+  elements.summaryBohPool.textContent = moneyFromCents(calc.bohPoolCents);
   elements.summaryPoints.textContent = calc.totalPoints;
 
   elements.staffSummaryBody.innerHTML = calc.staffRows.length
@@ -276,7 +340,7 @@ function renderSummary(calc) {
               <td>${row.fohPoints}</td>
               <td>${row.bohPoints}</td>
               <td>${row.totalPoints}</td>
-              <td>${money(row.payout)}</td>
+              <td>${moneyFromCents(row.payoutCents)}</td>
             </tr>
           `
         )
@@ -411,8 +475,17 @@ elements.shiftList.addEventListener("click", (event) => {
 
 elements.exportExcel.addEventListener("click", () => {
   const week = getCurrentWeek();
+  const calc = getCalculations();
   if (!week.shifts.length) {
     showToast("Add shifts before exporting");
+    return;
+  }
+  if (calc.hasUndistributedFoh) {
+    showToast("Add FOH points before exporting");
+    return;
+  }
+  if (calc.hasUndistributedBoh) {
+    showToast("Add BOH points before exporting");
     return;
   }
   exportExcel();
