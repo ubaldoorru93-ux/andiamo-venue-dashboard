@@ -95,8 +95,19 @@
                 Staff name
                 <input id="staffName" type="text" autocomplete="off" placeholder="e.g. Sofia" required />
               </label>
+              <div class="eligibility-picker" aria-label="Eligible work areas">
+                <label>
+                  <input id="staffFoh" type="checkbox" value="FOH" checked />
+                  FOH
+                </label>
+                <label>
+                  <input id="staffBoh" type="checkbox" value="BOH" checked />
+                  BOH
+                </label>
+              </div>
               <button class="secondary-button" type="submit">Add Staff</button>
             </form>
+            <p id="staffValidation" class="validation-message hidden" role="alert"></p>
 
             <div id="staffList" class="list-stack" aria-live="polite"></div>
           </article>
@@ -120,7 +131,7 @@
               </label>
               <label>
                 Area
-                <select id="shiftArea">
+                <select id="shiftArea" required>
                   <option value="FOH">FOH</option>
                   <option value="BOH">BOH</option>
                 </select>
@@ -241,6 +252,6 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260701-staff-edit-validation"></script>
   </body>
 </html>

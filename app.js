@@ -1,4 +1,5 @@
 const STORAGE_KEY = "andiamo-tip-distribution-v1";
+const STAFF_AREAS = ["FOH", "BOH"];
 const currency = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const dateFormat = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
 
@@ -22,6 +23,9 @@ const elements = {
   bohSplit: document.querySelector("#bohSplit"),
   staffForm: document.querySelector("#staffForm"),
   staffName: document.querySelector("#staffName"),
+  staffFoh: document.querySelector("#staffFoh"),
+  staffBoh: document.querySelector("#staffBoh"),
+  staffValidation: document.querySelector("#staffValidation"),
   staffList: document.querySelector("#staffList"),
   shiftForm: document.querySelector("#shiftForm"),
   shiftDate: document.querySelector("#shiftDate"),
@@ -49,10 +53,30 @@ const elements = {
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return { ...defaultState, ...saved };
+    return hydrateState({ ...defaultState, ...saved });
   } catch {
-    return { ...defaultState };
+    return hydrateState({ ...defaultState });
   }
+}
+
+function hydrateState(nextState) {
+  return {
+    ...defaultState,
+    ...nextState,
+    staff: Array.isArray(nextState.staff) ? nextState.staff.map(hydrateStaffMember) : [],
+    weeks: nextState.weeks && typeof nextState.weeks === "object" ? nextState.weeks : {},
+    selectedWeekStart: nextState.selectedWeekStart || defaultState.selectedWeekStart,
+  };
+}
+
+function hydrateStaffMember(person) {
+  return {
+    ...person,
+    id: person.id || uid("staff"),
+    name: String(person.name || ""),
+    active: person.active !== false,
+    areas: getStaffAreas(person),
+  };
 }
 
 function saveState() {
@@ -154,7 +178,10 @@ function calculateShiftPoints(shift) {
   if (shift.area === "FOH") {
     return getFohPoints(shift.fohRole, shift.fohLevel, shift.fohDuration);
   }
-  return getBohPoints(shift.bohCategory, shift.bohDuration);
+  if (shift.area === "BOH") {
+    return getBohPoints(shift.bohCategory, shift.bohDuration);
+  }
+  return 0;
 }
 
 function comparePayoutPriority(a, b, pointsKey) {
@@ -259,9 +286,74 @@ function getStaffName(staffId) {
   return state.staff.find((person) => person.id === staffId)?.name || "Unknown staff";
 }
 
+function cleanStaffName(name) {
+  return String(name).trim().replace(/\s+/g, " ");
+}
+
+function normalizeStaffName(name) {
+  return cleanStaffName(String(name).normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "")).toLocaleLowerCase("en-AU");
+}
+
+function findDuplicateStaff(name, ignoreId = "") {
+  const normalizedName = normalizeStaffName(name);
+  if (!normalizedName) return null;
+  return state.staff.find((person) => person.id !== ignoreId && normalizeStaffName(person.name) === normalizedName) || null;
+}
+
+function validateStaffDetails(name, areas, ignoreId = "") {
+  if (!name) {
+    return "Enter a staff name before saving.";
+  }
+  if (!areas.length) {
+    return "Choose FOH, BOH, or both for this staff member.";
+  }
+  const duplicate = findDuplicateStaff(name, ignoreId);
+  if (duplicate) {
+    return `${cleanStaffName(name)} is already in the staff list.`;
+  }
+  return "";
+}
+
+function setStaffValidation(message = "") {
+  elements.staffValidation.textContent = message;
+  elements.staffValidation.classList.toggle("hidden", !message);
+}
+
+function setStaffRowValidation(row, message = "") {
+  const validation = row.querySelector("[data-staff-validation]");
+  if (!validation) return;
+  validation.textContent = message;
+  validation.classList.toggle("hidden", !message);
+}
+
+function resetStaffRowInputs(row, person) {
+  const nameInput = row.querySelector("[data-staff-name]");
+  const areaInputs = Array.from(row.querySelectorAll("[data-staff-area]"));
+  const savedAreas = getStaffAreas(person);
+  if (nameInput) nameInput.value = person.name;
+  areaInputs.forEach((input) => {
+    input.checked = savedAreas.includes(input.value);
+  });
+}
+
+function getStaffAreas(person) {
+  if (!person) return [];
+  const savedAreas = Array.isArray(person.areas) ? person.areas : STAFF_AREAS;
+  const areas = STAFF_AREAS.filter((area) => savedAreas.includes(area));
+  return areas.length ? areas : [...STAFF_AREAS];
+}
+
+function areaLabel(area) {
+  return area === "FOH" ? "FOH" : "BOH";
+}
+
+function getSelectedStaffMember() {
+  return state.staff.find((person) => person.id === elements.shiftStaff.value);
+}
+
 function currentShiftDraft() {
   return {
-    area: elements.shiftArea.value || "FOH",
+    area: elements.shiftArea.value,
     fohRole: elements.fohRole.value || "Manager",
     fohLevel: elements.fohLevel.value || "high",
     fohDuration: elements.fohDuration.value || "over",
@@ -296,31 +388,71 @@ function render() {
 
 function renderStaff() {
   const activeStaff = state.staff.filter((person) => person.active !== false);
+  const selectedStaffId = elements.shiftStaff.value;
   elements.shiftStaff.innerHTML = activeStaff.length
     ? activeStaff.map((person) => `<option value="${person.id}">${escapeHtml(person.name)}</option>`).join("")
     : `<option value="">Add staff first</option>`;
+  if (activeStaff.some((person) => person.id === selectedStaffId)) {
+    elements.shiftStaff.value = selectedStaffId;
+  }
 
   elements.staffList.innerHTML = state.staff.length
     ? state.staff
         .map(
-          (person) => `
-            <div class="list-row ${person.active === false ? "muted-row" : ""}">
-              <span>${escapeHtml(person.name)}</span>
-              <button type="button" data-staff-toggle="${person.id}">
-                ${person.active === false ? "Reactivate" : "Deactivate"}
-              </button>
+          (person) => {
+            const areas = getStaffAreas(person);
+            return `
+            <div class="list-row staff-row ${person.active === false ? "muted-row" : ""}">
+              <div class="staff-editor">
+                <label>
+                  Name
+                  <input type="text" value="${escapeHtml(person.name)}" data-staff-name="${person.id}" aria-label="Staff name for ${escapeHtml(person.name)}" />
+                </label>
+                <div class="eligibility-picker compact-picker" aria-label="Eligible work areas for ${escapeHtml(person.name)}">
+                  ${STAFF_AREAS.map(
+                    (area) => `
+                      <label>
+                        <input type="checkbox" value="${area}" data-staff-area="${person.id}" ${areas.includes(area) ? "checked" : ""} />
+                        ${areaLabel(area)}
+                      </label>
+                    `
+                  ).join("")}
+                </div>
+                <p class="validation-message staff-card-validation hidden" data-staff-validation="${person.id}" role="alert"></p>
+              </div>
+              <div class="staff-row-actions">
+                <button type="button" data-staff-save="${person.id}">Save</button>
+                <button type="button" data-staff-toggle="${person.id}">
+                  ${person.active === false ? "Reactivate" : "Deactivate"}
+                </button>
+              </div>
             </div>
-          `
+          `;
+          }
         )
         .join("")
     : `<p class="empty-state">No staff added yet.</p>`;
 }
 
+function renderShiftAreaOptions() {
+  const selectedStaff = getSelectedStaffMember();
+  const areas = getStaffAreas(selectedStaff);
+  const selectedArea = elements.shiftArea.value;
+  elements.shiftArea.innerHTML = areas.length
+    ? areas.map((area) => `<option value="${area}">${areaLabel(area)}</option>`).join("")
+    : `<option value="">Choose eligible staff first</option>`;
+  if (areas.includes(selectedArea)) {
+    elements.shiftArea.value = selectedArea;
+  }
+}
+
 function renderShiftForm() {
-  const isFoh = elements.shiftArea.value === "FOH";
+  renderShiftAreaOptions();
+  const draft = currentShiftDraft();
+  const isFoh = draft.area === "FOH";
   elements.fohFields.classList.toggle("hidden", !isFoh);
   elements.bohFields.classList.toggle("hidden", isFoh);
-  elements.shiftPointsPreview.textContent = calculateShiftPoints(currentShiftDraft());
+  elements.shiftPointsPreview.textContent = draft.area ? calculateShiftPoints(draft) : 0;
 }
 
 function renderSummary(calc) {
@@ -398,6 +530,28 @@ function updateWeekValue(key, value) {
   render();
 }
 
+function renderCalculatedMoney() {
+  const week = getCurrentWeek();
+  const calc = getCalculations();
+  elements.heroTotalTips.textContent = moneyFromCents(calc.totalTipsCents);
+  elements.heroSplit.textContent = `FOH ${week.fohSplit}% / BOH ${week.bohSplit}%`;
+  renderSummary(calc);
+  saveState();
+}
+
+function updateMoneyValue(key, field) {
+  const week = getCurrentWeek();
+  const rawValue = field.value.trim();
+  const numericValue = Number(field.value);
+  if (rawValue.startsWith("-") || numericValue < 0) {
+    field.value = "0";
+    week[key] = 0;
+  } else {
+    week[key] = Number.isFinite(numericValue) ? numericValue : 0;
+  }
+  renderCalculatedMoney();
+}
+
 function updateSplit(changedKey, value) {
   const week = getCurrentWeek();
   const cleanValue = Math.min(100, Math.max(0, Number(value) || 0));
@@ -417,32 +571,76 @@ elements.weekStart.addEventListener("change", () => {
   render();
 });
 
-elements.cardTips.addEventListener("input", () => updateWeekValue("cardTips", Number(elements.cardTips.value)));
-elements.cashTips.addEventListener("input", () => updateWeekValue("cashTips", Number(elements.cashTips.value)));
+elements.cardTips.addEventListener("input", () => updateMoneyValue("cardTips", elements.cardTips));
+elements.cashTips.addEventListener("input", () => updateMoneyValue("cashTips", elements.cashTips));
 elements.fohSplit.addEventListener("input", () => updateSplit("fohSplit", elements.fohSplit.value));
 elements.bohSplit.addEventListener("input", () => updateSplit("bohSplit", elements.bohSplit.value));
 
 elements.staffForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const name = elements.staffName.value.trim();
-  if (!name) return;
-  state.staff.push({ id: uid("staff"), name, active: true });
+  const name = cleanStaffName(elements.staffName.value);
+  const areas = [];
+  if (elements.staffFoh.checked) areas.push("FOH");
+  if (elements.staffBoh.checked) areas.push("BOH");
+  const validationMessage = validateStaffDetails(name, areas);
+  if (validationMessage) {
+    setStaffValidation(validationMessage === "Enter a staff name before saving." ? "Enter a staff name before adding." : validationMessage);
+    return;
+  }
+  state.staff.push({ id: uid("staff"), name, active: true, areas });
   elements.staffName.value = "";
+  elements.staffFoh.checked = true;
+  elements.staffBoh.checked = true;
+  setStaffValidation();
   showToast("Staff added");
   render();
 });
 
+elements.staffName.addEventListener("input", () => setStaffValidation());
+[elements.staffFoh, elements.staffBoh].forEach((field) => field.addEventListener("change", () => setStaffValidation()));
+
 elements.staffList.addEventListener("click", (event) => {
-  const id = event.target.dataset.staffToggle;
-  if (!id) return;
-  const person = state.staff.find((staff) => staff.id === id);
-  person.active = person.active === false;
-  showToast(person.active ? "Staff reactivated" : "Staff deactivated");
-  render();
+  const saveId = event.target.dataset.staffSave;
+  const toggleId = event.target.dataset.staffToggle;
+
+  if (saveId) {
+    const person = state.staff.find((staff) => staff.id === saveId);
+    const row = event.target.closest(".staff-row");
+    if (!person || !row) return;
+    const nameInput = row.querySelector("[data-staff-name]");
+    const areaInputs = Array.from(row.querySelectorAll("[data-staff-area]"));
+    const name = cleanStaffName(nameInput.value);
+    const areas = areaInputs.filter((input) => input.checked).map((input) => input.value);
+    const validationMessage = validateStaffDetails(name, areas, saveId);
+
+    if (validationMessage) {
+      resetStaffRowInputs(row, person);
+      setStaffValidation();
+      setStaffRowValidation(row, validationMessage);
+      nameInput.focus();
+      return;
+    }
+
+    person.name = name;
+    person.areas = STAFF_AREAS.filter((area) => areas.includes(area));
+    setStaffValidation();
+    setStaffRowValidation(row);
+    showToast("Staff updated");
+    render();
+    return;
+  }
+
+  if (toggleId) {
+    const person = state.staff.find((staff) => staff.id === toggleId);
+    if (!person) return;
+    person.active = person.active === false;
+    showToast(person.active ? "Staff reactivated" : "Staff deactivated");
+    render();
+  }
 });
 
 ["change", "input"].forEach((eventName) => {
-  [elements.shiftArea, elements.fohRole, elements.fohLevel, elements.fohDuration, elements.bohCategory, elements.bohDuration].forEach((field) => {
+  [elements.shiftStaff, elements.shiftArea, elements.fohRole, elements.fohLevel, elements.fohDuration, elements.bohCategory, elements.bohDuration].forEach((field) => {
     field.addEventListener(eventName, renderShiftForm);
   });
 });
@@ -453,11 +651,23 @@ elements.shiftForm.addEventListener("submit", (event) => {
     showToast("Add staff before entering shifts");
     return;
   }
+  const staffMember = getSelectedStaffMember();
+  if (!staffMember || staffMember.active === false) {
+    showToast("Choose an active staff member");
+    render();
+    return;
+  }
+  const draft = currentShiftDraft();
+  if (!getStaffAreas(staffMember).includes(draft.area)) {
+    showToast(`${staffMember.name} is not eligible for that area`);
+    render();
+    return;
+  }
   const shift = {
     id: uid("shift"),
     date: elements.shiftDate.value,
     staffId: elements.shiftStaff.value,
-    ...currentShiftDraft(),
+    ...draft,
   };
   getCurrentWeek().shifts.push(shift);
   showToast("Shift added");

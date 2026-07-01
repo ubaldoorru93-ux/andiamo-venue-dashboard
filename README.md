@@ -7,8 +7,10 @@ Private local browser app for Andiamo Trattoria Chippendale weekly tip distribut
 - Monday to Sunday weekly setup
 - Card/Tyro tips and cash tips
 - Default 70% FOH and 30% BOH split, editable per week
-- Reusable staff saved in the browser
-- Simple FOH and BOH shift entry
+- Reusable staff saved in the browser with deactivate/reactivate controls
+- Duplicate staff-name validation that ignores capitalisation and extra spaces
+- Editable staff names and FOH/BOH eligibility
+- Simple FOH and BOH shift entry filtered by staff eligibility
 - Automatic points and payout calculations
 - Weekly summary report
 - Excel-compatible `.xls` export

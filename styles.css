@@ -240,7 +240,7 @@ button {
 
 .inline-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: end;
   margin-top: 18px;
@@ -272,6 +272,11 @@ textarea {
   background: #fbfaf7;
   color: var(--ink);
   padding: 9px 10px;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
 }
 
 input:focus,
@@ -320,6 +325,55 @@ textarea {
   border-radius: 8px;
   background: #fbfaf7;
   padding: 12px;
+}
+
+.staff-row {
+  align-items: end;
+}
+
+.staff-editor {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 12px;
+  width: 100%;
+}
+
+.staff-row-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.eligibility-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+}
+
+.eligibility-picker label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #3d453f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.compact-picker {
+  padding-bottom: 1px;
+}
+
+.validation-message {
+  margin: 10px 0 0;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.staff-card-validation {
+  grid-column: 1 / -1;
+  margin-top: 0;
 }
 
 .list-row span,
@@ -558,6 +612,10 @@ summary {
     grid-template-columns: 1fr;
     gap: 14px;
   }
+
+  .staff-editor {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -565,6 +623,7 @@ summary {
   .hero-band,
   .panel-header,
   .inline-form,
+  .staff-row,
   .shift-row,
   .response-card-header,
   .history-heading {
@@ -580,6 +639,15 @@ summary {
   .primary-button,
   .primary-action,
   .secondary-button {
+    width: 100%;
+  }
+
+  .staff-row-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .staff-row-actions button {
     width: 100%;
   }
 

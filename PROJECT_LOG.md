@@ -1,5 +1,71 @@
 # Project Log
 
+## 2026-07-01 - Staff Management Improvements
+
+### Project
+
+Improved the existing local staff management flow for the tip distribution tool.
+
+### Decisions
+
+- Preserve the existing `localStorage` key and saved staff records.
+- Upgrade older staff records in place by defaulting them to both FOH and BOH eligibility.
+- Keep existing deactivate/reactivate behaviour and shift calculations unchanged.
+- Filter only new shift entry choices by staff eligibility; existing recorded shifts remain intact.
+
+### Changes Made
+
+- Added duplicate staff-name prevention using trimmed, space-collapsed, case-insensitive comparison.
+- Added a clear staff validation message for duplicates and missing eligibility.
+- Added editable staff names in the staff list.
+- Added FOH/BOH eligibility controls for each staff member.
+- Updated the shift area dropdown to show only areas the selected active staff member can work.
+- Added submit validation so an ineligible area cannot be saved to a new shift.
+
+### Testing
+
+- Attempted `node --check app.js`, but Node.js is not installed on the normal system path.
+- Attempted in-app browser verification, but the browser runner hit a Windows permission issue.
+- Attempted Chrome and Edge headless verification; the browser processes launched but did not return usable DOM/screenshot output in this shell.
+- Completed code-path review for staff add/edit validation, eligibility filtering, deactivate/reactivate preservation, and unchanged payout rules.
+
+### Follow-Up Fix
+
+- Hardened staff duplicate detection after manual testing showed a duplicate legacy name could still be added.
+- Replaced the add/edit checks with one shared staff validator that runs before adding a new record or saving an edited name.
+- Strengthened the duplicate key to normalise Unicode, remove invisible zero-width characters, trim names, collapse repeated whitespace, and ignore capitalisation.
+- Stopped rewriting legacy staff names during state hydration so existing saved staff data is preserved while comparisons still use the stronger normalised key.
+
+### Duplicate Edit UI Fix
+
+- Fixed duplicate edit validation so the message appears directly on the affected staff card.
+- Reset invalid edited names back to the staff member's saved name immediately after a blocked save.
+- Reset the card's FOH/BOH eligibility controls back to their saved values when a staff edit is rejected.
+- Kept duplicate comparison across active and inactive staff using the strengthened normalised key.
+- Left tip calculations, shift records, point rules, and payout logic unchanged.
+
+## 2026-07-01 - Money Input Cents Fix
+
+### Project
+
+Fixed weekly tip inputs so Card/Tyro tips and Cash tips can accept dollars and cents.
+
+### Cause
+
+- The money inputs already used `step="0.01"` and `min="0"` in HTML.
+- The JavaScript input handler saved `Number(field.value)` and called the full `render()` on every keystroke.
+- The full render wrote the numeric value back into the active field, so partial decimal typing like `100.` was converted back to `100` before cents could be entered.
+
+### Changes Made
+
+- Added a money-specific input update path that stores the numeric value and refreshes calculated totals without rewriting the active input field.
+- Preserved existing cent rounding, FOH/BOH pool reconciliation, staff management, and point rules.
+- Kept Card/Tyro tips and Cash tips as non-negative decimal inputs with `step="0.01"`.
+
+### Testing
+
+- Manual retest needed in browser: entering `100.01` with a 70/30 split should show Total tips `$100.01`, FOH pool `$70.01`, and BOH pool `$30.00`.
+
 ## 2026-06-13 - Milestone 1 Started
 
 ### Project
