@@ -22,8 +22,10 @@
           <a class="nav-item active" href="#weekly">Weekly Setup</a>
           <a class="nav-item" href="#staff">Staff</a>
           <a class="nav-item" href="#shifts">Shifts</a>
+          <a class="nav-item" href="#weekly-shift-builder">Shift Builder</a>
           <a class="nav-item" href="#summary">Summary</a>
           <a class="nav-item" href="#details">Details</a>
+          <a class="nav-item" href="#history">Weekly History</a>
           <a class="nav-item" href="review-tool.html">Review Tool</a>
         </nav>
       </aside>
@@ -46,7 +48,10 @@
             <strong id="heroTotalTips">$0.00</strong>
             <span id="heroSplit">FOH 70% / BOH 30%</span>
           </div>
-          <button id="exportExcel" class="primary-button" type="button">Export Excel</button>
+          <div class="hero-actions">
+            <button id="exportExcel" class="primary-button" type="button">Export Excel</button>
+            <button id="finishWeek" class="primary-button finish-button" type="button">Finish Week</button>
+          </div>
         </section>
 
         <section id="weekly" class="panel">
@@ -57,27 +62,44 @@
             </div>
           </div>
 
-          <form id="weekForm" class="form-grid">
-            <label>
-              Week starting Monday
-              <input id="weekStart" type="date" required />
-            </label>
-            <label>
-              Card/Tyro tips
-              <input id="cardTips" type="number" min="0" step="0.01" inputmode="decimal" />
-            </label>
-            <label>
-              Cash tips
-              <input id="cashTips" type="number" min="0" step="0.01" inputmode="decimal" />
-            </label>
-            <label>
-              FOH split %
-              <input id="fohSplit" type="number" min="0" max="100" step="0.01" />
-            </label>
-            <label>
-              BOH split %
-              <input id="bohSplit" type="number" min="0" max="100" step="0.01" />
-            </label>
+          <form id="weekForm" class="week-setup-form">
+            <div class="form-grid split-grid">
+              <label>
+                Week starting Monday
+                <input id="weekStart" type="date" required />
+              </label>
+              <label>
+                FOH split %
+                <input id="fohSplit" type="number" min="0" max="100" step="0.01" />
+              </label>
+              <label>
+                BOH split %
+                <input id="bohSplit" type="number" min="0" max="100" step="0.01" />
+              </label>
+            </div>
+
+            <div id="dailyTipsNotice" class="migration-notice hidden">
+              <strong>Review daily tip allocation</strong>
+              <p>Older weekly tip totals were assigned to Monday so the data was not lost. Move the Card/Tyro and cash amounts to the correct daily rows before exporting or finishing the week.</p>
+              <label>
+                <input id="dailyTipsReviewed" type="checkbox" />
+                I have reviewed the daily tip allocation
+              </label>
+            </div>
+
+            <div class="table-wrap daily-tips-wrap">
+              <table class="daily-tips-table">
+                <thead>
+                  <tr>
+                    <th>Day</th>
+                    <th>Card/Tyro tips</th>
+                    <th>Cash tips</th>
+                    <th>Daily total</th>
+                  </tr>
+                </thead>
+                <tbody id="dailyTipsBody"></tbody>
+              </table>
+            </div>
           </form>
         </section>
 
@@ -187,6 +209,73 @@
           </article>
         </section>
 
+        <section id="weekly-shift-builder" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Fast entry</p>
+              <h3>Weekly Shift Builder</h3>
+            </div>
+          </div>
+
+          <form id="builderForm" class="builder-form">
+            <div class="builder-defaults">
+              <label>
+                Staff
+                <select id="builderStaff" required></select>
+              </label>
+              <label>
+                Area
+                <select id="builderArea" required></select>
+              </label>
+
+              <div id="builderFohFields" class="builder-default-group">
+                <label>
+                  Role
+                  <select id="builderFohRole">
+                    <option value="Manager">Manager</option>
+                    <option value="Waiter">Waiter</option>
+                  </select>
+                </label>
+                <label>
+                  Shift level
+                  <select id="builderFohLevel">
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                  </select>
+                </label>
+                <label>
+                  Duration
+                  <select id="builderFohDuration">
+                    <option value="over">Over 7h</option>
+                    <option value="under">Under 7h</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="builderBohFields" class="builder-default-group hidden">
+                <label>
+                  Category
+                  <select id="builderBohCategory">
+                    <option value="Senior">Senior</option>
+                    <option value="Non-senior">Non-senior</option>
+                  </select>
+                </label>
+                <label>
+                  Duration
+                  <select id="builderBohDuration">
+                    <option value="full">Full</option>
+                    <option value="half">Half</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div id="builderDays" class="builder-days"></div>
+
+            <button class="primary-action builder-submit" type="submit">Add Selected Shifts</button>
+          </form>
+        </section>
+
         <section id="summary" class="panel">
           <div class="panel-header">
             <div>
@@ -236,6 +325,11 @@
               <tbody id="staffSummaryBody"></tbody>
             </table>
           </div>
+
+          <div class="daily-allocation-section">
+            <h4>Daily Allocation</h4>
+            <div id="dailyAllocationList" class="daily-allocation-list"></div>
+          </div>
         </section>
 
         <section id="details" class="panel">
@@ -248,10 +342,21 @@
 
           <div id="shiftList" class="shift-list"></div>
         </section>
+
+        <section id="history" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Completed records</p>
+              <h3>Weekly History</h3>
+            </div>
+          </div>
+
+          <div id="weeklyHistoryList" class="weekly-history-list" aria-live="polite"></div>
+        </section>
       </main>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260701-staff-edit-validation"></script>
+    <script src="app.js?v=20260703-weekly-shift-builder"></script>
   </body>
 </html>

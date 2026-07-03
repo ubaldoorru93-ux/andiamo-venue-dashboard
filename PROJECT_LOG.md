@@ -1,5 +1,61 @@
 # Project Log
 
+## 2026-07-03 - Finish Week and Weekly History
+
+### Project
+
+Added a completed-week workflow for the tip distribution tool, extended it with safe reopening, changed allocation from weekly pooled tips to daily tip allocation, then added fast weekly shift entry.
+
+### Decisions
+
+- Preserve the existing `localStorage` key and migrate older saved data by defaulting `completedWeeks` to an empty list.
+- Reuse the existing cent-based calculation and payout allocation logic for completion snapshots and history exports.
+- Save a completed-week record before replacing the current week with a blank week.
+- Keep the staff list and FOH/BOH split settings after finishing a week.
+- Prevent duplicate completion while a completed record for the same week remains in Weekly History.
+- Allow reopening only when the active week is empty so existing active tips and shifts are never overwritten.
+- Restore reopened weeks from the completed snapshot without creating or editing staff records.
+- Remove the completed history record only after the reopened active-week state is saved successfully.
+- Allocate tips by individual date so staff only share tips earned on days they worked.
+- Preserve legacy active weekly totals by assigning them to Monday and requiring daily allocation review.
+- Keep old completed history records readable and exportable as legacy weekly allocation records.
+- Keep the original single-shift form while adding a separate Weekly Shift Builder for faster recurring shift entry.
+- Save builder-created shifts atomically so failed validation or storage errors do not partially update the active week.
+- Leave the review response tool files and behaviour unchanged.
+
+### Changes Made
+
+- Added a clearly labelled **Finish Week** button beside Excel export.
+- Added confirmation text summarising week range, total tips, FOH pool, BOH pool, shift count, and staff receiving payouts.
+- Added finish validation for the existing export safety checks, undistributed positive FOH/BOH pools, exact cent reconciliation, and duplicate completed weeks.
+- Added completed-week snapshots with unique ID, week dates, tips, split percentages, pool totals, staff payout results, detailed shifts, and completion timestamp.
+- Added post-finish reset that clears weekly tips and shifts, advances the selected week by exactly seven days, and keeps staff and split settings.
+- Added Weekly History with expandable payout and shift details, Excel re-export, and confirmed delete.
+- Added **Reopen Week** to completed history records with confirmation, empty-active-week validation, and snapshot restoration.
+- Replaced weekly Card/Tyro and cash inputs with a seven-day Daily Tips table.
+- Reworked payout calculations so each date has separate FOH/BOH pools, separate point totals, separate leftover-cent allocation, and weekly staff payouts are summed from daily payouts.
+- Added a compact Daily Allocation breakdown to the Summary.
+- Expanded Excel export with daily tips, daily pools, daily staff payout allocations, weekly payout totals, detailed shifts, and cent reconciliation.
+- Expanded Finish Week snapshots and Reopen Week restore data to include daily tip records and daily allocation details.
+- Added active legacy data migration notice and review confirmation before export/finish.
+- Added **Weekly Shift Builder** with one staff selector, eligibility-filtered area options, default settings, seven worked-day checkboxes, compact per-day overrides, point previews, confirmation, exact duplicate detection, and atomic batch saving.
+- Improved the visible Excel reconciliation section to show formatted dollar totals, payout totals, difference, and Yes/No exact-cent status instead of raw cent values.
+- Updated responsive styles for the new hero actions and history controls.
+- Updated the `app.js` cache-busting query in `index.html`.
+
+### Testing
+
+- Manual browser retest still needed in Chrome with the known test week:
+  - Card/Tyro tips: $423.65
+  - Cash tips: $76.40
+  - Total tips: $500.05
+  - FOH pool: $350.04
+  - BOH pool: $150.01
+  - Five shifts across four staff members
+- Attempted `node --check app.js`, but Node.js is not installed on the normal system path.
+- Confirmed there is no bundled `node.exe` in the project folder.
+- Completed static code review for daily allocation by date, weekly shift builder batch validation, exact duplicate detection, save-before-clear ordering, duplicate-week prevention, reopen save ordering, current-week export, history export, and unchanged point calculation functions.
+
 ## 2026-07-01 - Staff Management Improvements
 
 ### Project
