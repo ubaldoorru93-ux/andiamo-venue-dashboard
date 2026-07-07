@@ -50,6 +50,9 @@
           </div>
           <div class="hero-actions">
             <button id="exportExcel" class="primary-button" type="button">Export Excel</button>
+            <button id="backupData" class="primary-button" type="button">Backup Data</button>
+            <button id="restoreData" class="primary-button" type="button">Restore Data</button>
+            <input id="restoreBackupFile" class="hidden" type="file" accept="application/json,.json" />
             <button id="finishWeek" class="primary-button finish-button" type="button">Finish Week</button>
           </div>
         </section>
@@ -140,6 +143,7 @@
                 <p class="eyebrow">Step 3</p>
                 <h3>Add Shift</h3>
               </div>
+              <button id="copyPreviousWeekShifts" class="secondary-button" type="button">Copy Previous Week Shifts</button>
             </div>
 
             <form id="shiftForm" class="shift-form">

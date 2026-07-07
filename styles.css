@@ -548,6 +548,27 @@ textarea {
   color: var(--blue);
 }
 
+.editing-shift-row {
+  display: block;
+}
+
+.shift-edit-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.shift-edit-form .conditional-fields {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.shift-edit-actions {
+  align-self: end;
+  justify-content: flex-start;
+}
+
 .weekly-history-list {
   display: grid;
   gap: 12px;
@@ -859,6 +880,7 @@ summary {
   .content-grid,
   .form-grid,
   .shift-form,
+  .shift-edit-form,
   .builder-defaults,
   .builder-days,
   .review-grid,

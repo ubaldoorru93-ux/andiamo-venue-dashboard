@@ -12,12 +12,16 @@ const defaultState = {
 };
 
 let state = loadState();
+let editingShiftId = "";
 
 const elements = {
   weekRangeLabel: document.querySelector("#weekRangeLabel"),
   heroTotalTips: document.querySelector("#heroTotalTips"),
   heroSplit: document.querySelector("#heroSplit"),
   exportExcel: document.querySelector("#exportExcel"),
+  backupData: document.querySelector("#backupData"),
+  restoreData: document.querySelector("#restoreData"),
+  restoreBackupFile: document.querySelector("#restoreBackupFile"),
   finishWeek: document.querySelector("#finishWeek"),
   weekStart: document.querySelector("#weekStart"),
   dailyTipsBody: document.querySelector("#dailyTipsBody"),
@@ -32,6 +36,7 @@ const elements = {
   staffValidation: document.querySelector("#staffValidation"),
   staffList: document.querySelector("#staffList"),
   shiftForm: document.querySelector("#shiftForm"),
+  copyPreviousWeekShifts: document.querySelector("#copyPreviousWeekShifts"),
   shiftDate: document.querySelector("#shiftDate"),
   shiftStaff: document.querySelector("#shiftStaff"),
   shiftArea: document.querySelector("#shiftArea"),
@@ -108,6 +113,145 @@ function hydrateCompletedWeek(week) {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function getAppLocalStorageKeys() {
+  const keys = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key && (key === STORAGE_KEY || key.startsWith("andiamo-tip-distribution-"))) {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+function getAppLocalStorageEntries() {
+  return getAppLocalStorageKeys().reduce((entries, key) => {
+    entries[key] = localStorage.getItem(key);
+    return entries;
+  }, {});
+}
+
+function createBackupPayload() {
+  return {
+    app: "Andiamo Tip Distribution",
+    backupVersion: 1,
+    storageKey: STORAGE_KEY,
+    exportedAt: new Date().toISOString(),
+    data: state,
+    localStorage: getAppLocalStorageEntries(),
+  };
+}
+
+function validateRestoreState(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { error: "Backup data is not a valid object." };
+  }
+  if (!Array.isArray(value.staff)) {
+    return { error: "Backup is missing the saved staff list." };
+  }
+  if (!value.weeks || typeof value.weeks !== "object" || Array.isArray(value.weeks)) {
+    return { error: "Backup is missing active week data." };
+  }
+  if (!Array.isArray(value.completedWeeks)) {
+    return { error: "Backup is missing completed weekly history." };
+  }
+  if (!value.selectedWeekStart) {
+    return { error: "Backup has an invalid selected week date." };
+  }
+  const selectedWeekDate = parseLocalDate(value.selectedWeekStart);
+  if (Number.isNaN(selectedWeekDate.getTime()) || toDateInput(selectedWeekDate) !== value.selectedWeekStart) {
+    return { error: "Backup has an invalid selected week date." };
+  }
+  return { state: hydrateState(value) };
+}
+
+function getRestoreStateFromBackup(backup) {
+  if (!backup || typeof backup !== "object" || Array.isArray(backup)) {
+    return { error: "Choose a valid Andiamo backup JSON file." };
+  }
+
+  if (backup.storageKey === STORAGE_KEY && backup.data) {
+    const result = validateRestoreState(backup.data);
+    if (result.error) return result;
+    return {
+      state: result.state,
+      localStorageEntries: {
+        ...(backup.localStorage && typeof backup.localStorage === "object" && !Array.isArray(backup.localStorage) ? backup.localStorage : {}),
+        [STORAGE_KEY]: JSON.stringify(result.state),
+      },
+    };
+  }
+
+  const storedBackup = backup.localStorage?.[STORAGE_KEY];
+  if (storedBackup) {
+    try {
+      const result = validateRestoreState(typeof storedBackup === "string" ? JSON.parse(storedBackup) : storedBackup);
+      if (result.error) return result;
+      return {
+        state: result.state,
+        localStorageEntries: backup.localStorage,
+      };
+    } catch {
+      return { error: "Backup local storage data could not be read." };
+    }
+  }
+
+  return { error: "This file is not a Tip Distribution backup." };
+}
+
+function getRestoreConfirmationMessage(nextState) {
+  return [
+    "Restore this backup?",
+    "",
+    `Staff records: ${nextState.staff.length}`,
+    `Active weeks saved: ${Object.keys(nextState.weeks).length}`,
+    `Completed weeks: ${nextState.completedWeeks.length}`,
+    `Selected week: ${nextState.selectedWeekStart}`,
+    "",
+    "This will replace the current Tip Distribution data in this browser.",
+  ].join("\n");
+}
+
+function downloadBackupData() {
+  const payload = createBackupPayload();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `andiamo-tip-distribution-backup-${toDateInput(new Date())}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast("Backup JSON created");
+}
+
+async function restoreBackupData(file) {
+  if (!file) return;
+
+  try {
+    const backup = JSON.parse(await file.text());
+    const result = getRestoreStateFromBackup(backup);
+    if (result.error) {
+      showToast(result.error);
+      return;
+    }
+
+    const confirmed = window.confirm(getRestoreConfirmationMessage(result.state));
+    if (!confirmed) return;
+
+    getAppLocalStorageKeys().forEach((key) => localStorage.removeItem(key));
+    Object.entries(result.localStorageEntries || {}).forEach(([key, value]) => {
+      if (key === STORAGE_KEY || key.startsWith("andiamo-tip-distribution-")) {
+        localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+      }
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(result.state));
+    state = result.state;
+    showToast("Backup restored");
+    render();
+  } catch {
+    showToast("Could not read backup JSON. Nothing was restored.");
+  }
 }
 
 function getCurrentWeek() {
@@ -792,6 +936,252 @@ function getShiftDescription(shift) {
     : `${shift.area} ${shift.bohCategory}, ${capitalize(shift.bohDuration)}`;
 }
 
+function renderShiftStaffOptions(selectedStaffId) {
+  const staffOptions = state.staff.filter((person) => person.active !== false || person.id === selectedStaffId);
+  return staffOptions.length
+    ? staffOptions
+        .map((person) => {
+          const inactiveLabel = person.active === false ? " (inactive)" : "";
+          return `<option value="${person.id}" ${person.id === selectedStaffId ? "selected" : ""}>${escapeHtml(person.name)}${inactiveLabel}</option>`;
+        })
+        .join("")
+    : `<option value="">Add staff first</option>`;
+}
+
+function renderShiftAreaOptionsForStaff(staffId, selectedArea) {
+  const staffMember = state.staff.find((person) => person.id === staffId);
+  const areas = getStaffAreas(staffMember);
+  return areas.length
+    ? areas.map((area) => `<option value="${area}" ${area === selectedArea ? "selected" : ""}>${areaLabel(area)}</option>`).join("")
+    : `<option value="">Choose eligible staff first</option>`;
+}
+
+function getShiftDraftFromEditRow(row) {
+  return {
+    date: row.querySelector("[data-edit-date]")?.value || "",
+    staffId: row.querySelector("[data-edit-staff]")?.value || "",
+    area: row.querySelector("[data-edit-area]")?.value || "",
+    fohRole: row.querySelector("[data-edit-foh-role]")?.value || "Manager",
+    fohLevel: row.querySelector("[data-edit-foh-level]")?.value || "high",
+    fohDuration: row.querySelector("[data-edit-foh-duration]")?.value || "over",
+    bohCategory: row.querySelector("[data-edit-boh-category]")?.value || "Senior",
+    bohDuration: row.querySelector("[data-edit-boh-duration]")?.value || "full",
+  };
+}
+
+function validateShiftForSave(shift, ignoreId = "") {
+  const weekDates = new Set(getWeekDates(state.selectedWeekStart).map((day) => day.date));
+  if (!weekDates.has(shift.date)) {
+    return "Choose a date inside the selected week.";
+  }
+
+  const staffMember = state.staff.find((person) => person.id === shift.staffId);
+  if (!staffMember) {
+    return "Choose a staff member for this shift.";
+  }
+
+  if (!getStaffAreas(staffMember).includes(shift.area)) {
+    return `${staffMember.name} is not eligible for that area.`;
+  }
+
+  const duplicate = getCurrentWeek().shifts.some((existingShift) => existingShift.id !== ignoreId && getComparableShiftKey(existingShift) === getComparableShiftKey(shift));
+  if (duplicate) {
+    return `Duplicate shift blocked for ${formatShiftDate(shift.date)}: ${getShiftDescription(shift)}`;
+  }
+
+  return "";
+}
+
+function updateShiftEditRow(row) {
+  const staffSelect = row.querySelector("[data-edit-staff]");
+  const areaSelect = row.querySelector("[data-edit-area]");
+  const selectedStaff = state.staff.find((person) => person.id === staffSelect?.value);
+  const areas = getStaffAreas(selectedStaff);
+  const selectedArea = areas.includes(areaSelect?.value) ? areaSelect.value : areas[0] || "";
+
+  if (areaSelect) {
+    areaSelect.innerHTML = renderShiftAreaOptionsForStaff(staffSelect?.value || "", selectedArea);
+    areaSelect.value = selectedArea;
+  }
+
+  const draft = getShiftDraftFromEditRow(row);
+  row.querySelector("[data-edit-foh-fields]")?.classList.toggle("hidden", draft.area !== "FOH");
+  row.querySelector("[data-edit-boh-fields]")?.classList.toggle("hidden", draft.area === "FOH");
+  const points = row.querySelector("[data-edit-points]");
+  if (points) points.value = draft.area ? calculateShiftPoints(draft) : 0;
+}
+
+function renderShiftEditForm(shift) {
+  const sunday = toDateInput(addDays(state.selectedWeekStart, 6));
+  const isFoh = shift.area === "FOH";
+  const points = calculateShiftPoints(shift);
+
+  return `
+    <form class="shift-edit-form" data-shift-edit-form="${shift.id}">
+      <label>
+        Date
+        <input type="date" min="${state.selectedWeekStart}" max="${sunday}" value="${shift.date}" data-edit-date required />
+      </label>
+      <label>
+        Staff
+        <select data-edit-staff required>${renderShiftStaffOptions(shift.staffId)}</select>
+      </label>
+      <label>
+        Area
+        <select data-edit-area required>${renderShiftAreaOptionsForStaff(shift.staffId, shift.area)}</select>
+      </label>
+      <div class="conditional-fields shift-edit-foh ${isFoh ? "" : "hidden"}" data-edit-foh-fields>
+        <label>
+          Role
+          <select data-edit-foh-role>
+            <option value="Manager" ${shift.fohRole === "Manager" ? "selected" : ""}>Manager</option>
+            <option value="Waiter" ${shift.fohRole === "Waiter" ? "selected" : ""}>Waiter</option>
+          </select>
+        </label>
+        <label>
+          Shift level
+          <select data-edit-foh-level>
+            <option value="high" ${shift.fohLevel === "high" ? "selected" : ""}>High</option>
+            <option value="low" ${shift.fohLevel === "low" ? "selected" : ""}>Low</option>
+          </select>
+        </label>
+        <label>
+          Duration
+          <select data-edit-foh-duration>
+            <option value="over" ${shift.fohDuration === "over" ? "selected" : ""}>Over 7h</option>
+            <option value="under" ${shift.fohDuration === "under" ? "selected" : ""}>Under 7h</option>
+          </select>
+        </label>
+      </div>
+      <div class="conditional-fields shift-edit-boh ${isFoh ? "hidden" : ""}" data-edit-boh-fields>
+        <label>
+          Category
+          <select data-edit-boh-category>
+            <option value="Senior" ${shift.bohCategory === "Senior" ? "selected" : ""}>Senior</option>
+            <option value="Non-senior" ${shift.bohCategory === "Non-senior" ? "selected" : ""}>Non-senior</option>
+          </select>
+        </label>
+        <label>
+          Duration
+          <select data-edit-boh-duration>
+            <option value="full" ${shift.bohDuration === "full" ? "selected" : ""}>Full</option>
+            <option value="half" ${shift.bohDuration === "half" ? "selected" : ""}>Half</option>
+          </select>
+        </label>
+      </div>
+      <label>
+        Points
+        <input type="number" value="${points}" data-edit-points readonly />
+      </label>
+      <div class="shift-actions shift-edit-actions">
+        <button type="submit" data-shift-save="${shift.id}">Save</button>
+        <button type="button" data-shift-cancel="${shift.id}">Cancel</button>
+      </div>
+    </form>
+  `;
+}
+
+function getWeekTime(weekStart) {
+  if (typeof weekStart !== "string" || !weekStart) return NaN;
+  const date = parseLocalDate(weekStart);
+  return Number.isNaN(date.getTime()) ? NaN : date.getTime();
+}
+
+function getPreviousShiftSource() {
+  const currentWeekTime = getWeekTime(state.selectedWeekStart);
+  const sources = [];
+
+  state.completedWeeks.forEach((week) => {
+    const weekTime = getWeekTime(week.weekStart);
+    if (weekTime < currentWeekTime && Array.isArray(week.shifts) && week.shifts.length) {
+      sources.push({
+        weekStart: week.weekStart,
+        weekEnd: week.weekEnd || toDateInput(addDays(week.weekStart, 6)),
+        shifts: week.shifts,
+      });
+    }
+  });
+
+  Object.entries(state.weeks).forEach(([weekStart, week]) => {
+    const weekTime = getWeekTime(weekStart);
+    if (weekStart !== state.selectedWeekStart && weekTime < currentWeekTime && Array.isArray(week.shifts) && week.shifts.length) {
+      sources.push({
+        weekStart,
+        weekEnd: toDateInput(addDays(weekStart, 6)),
+        shifts: week.shifts,
+      });
+    }
+  });
+
+  return sources.sort((a, b) => getWeekTime(b.weekStart) - getWeekTime(a.weekStart))[0] || null;
+}
+
+function createShiftCopyForCurrentWeek(shift, sourceWeekStart) {
+  if (!shift.date || !sourceWeekStart) return null;
+  const sourceDate = parseLocalDate(shift.date);
+  const sourceStartDate = parseLocalDate(sourceWeekStart);
+  const dayOffset = Math.round((sourceDate.getTime() - sourceStartDate.getTime()) / 86400000);
+  if (!Number.isFinite(dayOffset) || dayOffset < 0 || dayOffset > 6) return null;
+
+  return {
+    id: uid("shift"),
+    date: toDateInput(addDays(state.selectedWeekStart, dayOffset)),
+    staffId: shift.staffId,
+    area: shift.area,
+    fohRole: shift.fohRole || "Manager",
+    fohLevel: shift.fohLevel || "high",
+    fohDuration: shift.fohDuration || "over",
+    bohCategory: shift.bohCategory || "Senior",
+    bohDuration: shift.bohDuration || "full",
+  };
+}
+
+function getCopyPreviousWeekConfirmationMessage(source, shifts) {
+  return [
+    "Copy previous week shifts?",
+    "",
+    `From: ${formatWeekRange(source.weekStart, source.weekEnd)}`,
+    `To: ${formatWeekRange(state.selectedWeekStart, toDateInput(addDays(state.selectedWeekStart, 6)))}`,
+    `Shifts to add: ${shifts.length}`,
+    "",
+    "Only staff shift setup will be copied. Tip amounts, payouts, and calculations will not be copied.",
+  ].join("\n");
+}
+
+function copyPreviousWeekShifts() {
+  const source = getPreviousShiftSource();
+  if (!source) {
+    showToast("No previous week with shifts found");
+    return;
+  }
+
+  const currentWeek = getCurrentWeek();
+  const existingKeys = new Set(currentWeek.shifts.map(getComparableShiftKey));
+  const batchKeys = new Set();
+  const shiftsToCopy = [];
+
+  source.shifts.forEach((shift) => {
+    const copiedShift = createShiftCopyForCurrentWeek(shift, source.weekStart);
+    if (!copiedShift) return;
+    const key = getComparableShiftKey(copiedShift);
+    if (existingKeys.has(key) || batchKeys.has(key)) return;
+    batchKeys.add(key);
+    shiftsToCopy.push(copiedShift);
+  });
+
+  if (!shiftsToCopy.length) {
+    showToast("Previous week shifts are already copied here");
+    return;
+  }
+
+  const confirmed = window.confirm(getCopyPreviousWeekConfirmationMessage(source, shiftsToCopy));
+  if (!confirmed) return;
+
+  currentWeek.shifts.push(...shiftsToCopy);
+  showToast(`${shiftsToCopy.length} previous week shift${shiftsToCopy.length === 1 ? "" : "s"} copied`);
+  render();
+}
+
 function getBuilderSelectedShifts() {
   const staffMember = getSelectedBuilderStaffMember();
   if (!staffMember || staffMember.active === false) {
@@ -1160,6 +1550,13 @@ function renderShifts() {
         .map((shift) => {
           const points = calculateShiftPoints(shift);
           const detail = getShiftDetail(shift);
+          if (editingShiftId === shift.id) {
+            return `
+              <article class="shift-row editing-shift-row">
+                ${renderShiftEditForm(shift)}
+              </article>
+            `;
+          }
           return `
             <article class="shift-row">
               <div>
@@ -1168,6 +1565,7 @@ function renderShifts() {
               </div>
               <div class="shift-actions">
                 <b>${points} pts</b>
+                <button type="button" data-shift-edit="${shift.id}">Edit</button>
                 <button type="button" data-shift-delete="${shift.id}">Delete</button>
               </div>
             </article>
@@ -1343,6 +1741,7 @@ function updateSplit(changedKey, value) {
 elements.weekStart.addEventListener("change", () => {
   const monday = getMonday(parseLocalDate(elements.weekStart.value));
   state.selectedWeekStart = toDateInput(monday);
+  editingShiftId = "";
   render();
 });
 
@@ -1507,19 +1906,73 @@ elements.shiftForm.addEventListener("submit", (event) => {
     staffId: elements.shiftStaff.value,
     ...draft,
   };
+  const validationMessage = validateShiftForSave(shift);
+  if (validationMessage) {
+    showToast(validationMessage);
+    return;
+  }
   getCurrentWeek().shifts.push(shift);
   showToast("Shift added");
   render();
 });
 
 elements.shiftList.addEventListener("click", (event) => {
+  const editId = event.target.dataset.shiftEdit;
+  const cancelId = event.target.dataset.shiftCancel;
   const id = event.target.dataset.shiftDelete;
+
+  if (editId) {
+    editingShiftId = editId;
+    renderShifts();
+    return;
+  }
+
+  if (cancelId) {
+    editingShiftId = "";
+    renderShifts();
+    return;
+  }
+
   if (!id) return;
   const week = getCurrentWeek();
   week.shifts = week.shifts.filter((shift) => shift.id !== id);
+  if (editingShiftId === id) editingShiftId = "";
   showToast("Shift deleted");
   render();
 });
+
+elements.shiftList.addEventListener("submit", (event) => {
+  const row = event.target.closest("[data-shift-edit-form]");
+  if (!row) return;
+  event.preventDefault();
+
+  const shiftId = row.dataset.shiftEditForm;
+  const week = getCurrentWeek();
+  const shift = week.shifts.find((currentShift) => currentShift.id === shiftId);
+  if (!shift) return;
+
+  const nextShift = {
+    ...shift,
+    ...getShiftDraftFromEditRow(row),
+  };
+  const validationMessage = validateShiftForSave(nextShift, shiftId);
+  if (validationMessage) {
+    showToast(validationMessage);
+    return;
+  }
+
+  Object.assign(shift, nextShift);
+  editingShiftId = "";
+  showToast("Shift updated");
+  render();
+});
+
+elements.shiftList.addEventListener("change", (event) => {
+  const row = event.target.closest("[data-shift-edit-form]");
+  if (row) updateShiftEditRow(row);
+});
+
+elements.copyPreviousWeekShifts.addEventListener("click", copyPreviousWeekShifts);
 
 elements.exportExcel.addEventListener("click", () => {
   const week = getCurrentWeek();
@@ -1530,6 +1983,18 @@ elements.exportExcel.addEventListener("click", () => {
     return;
   }
   exportExcel(getCurrentWeekSnapshot(calc));
+});
+
+elements.backupData.addEventListener("click", downloadBackupData);
+
+elements.restoreData.addEventListener("click", () => {
+  elements.restoreBackupFile.click();
+});
+
+elements.restoreBackupFile.addEventListener("change", async () => {
+  const file = elements.restoreBackupFile.files?.[0];
+  await restoreBackupData(file);
+  elements.restoreBackupFile.value = "";
 });
 
 elements.finishWeek.addEventListener("click", finishCurrentWeek);
