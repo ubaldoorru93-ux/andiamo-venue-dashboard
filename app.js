@@ -24,6 +24,7 @@ const elements = {
   restoreBackupFile: document.querySelector("#restoreBackupFile"),
   finishWeek: document.querySelector("#finishWeek"),
   weekStart: document.querySelector("#weekStart"),
+  startSelectWeek: document.querySelector("#startSelectWeek"),
   dailyTipsBody: document.querySelector("#dailyTipsBody"),
   dailyTipsNotice: document.querySelector("#dailyTipsNotice"),
   dailyTipsReviewed: document.querySelector("#dailyTipsReviewed"),
@@ -1738,12 +1739,40 @@ function updateSplit(changedKey, value) {
   render();
 }
 
-elements.weekStart.addEventListener("change", () => {
-  const monday = getMonday(parseLocalDate(elements.weekStart.value));
-  state.selectedWeekStart = toDateInput(monday);
+function startOrSelectWeek() {
+  const selectedDate = parseLocalDate(elements.weekStart.value);
+  if (Number.isNaN(selectedDate.getTime())) {
+    elements.weekStart.value = state.selectedWeekStart;
+    showToast("Choose a valid week date");
+    return;
+  }
+
+  const monday = toDateInput(getMonday(selectedDate));
+  if (monday === state.selectedWeekStart) {
+    elements.weekStart.value = state.selectedWeekStart;
+    showToast("This week is already selected");
+    return;
+  }
+
+  const existingWeek = Boolean(state.weeks[monday]);
+  const confirmed = window.confirm(getWeekSwitchConfirmationMessage(monday, existingWeek));
+  if (!confirmed) {
+    elements.weekStart.value = state.selectedWeekStart;
+    return;
+  }
+
+  const currentWeek = getCurrentWeek();
+  if (!existingWeek) {
+    state.weeks[monday] = createBlankWeek(currentWeek.fohSplit, currentWeek.bohSplit, monday);
+  }
+
+  state.selectedWeekStart = monday;
   editingShiftId = "";
   render();
-});
+  showToast(existingWeek ? "Saved week loaded" : "Blank week started");
+}
+
+elements.startSelectWeek.addEventListener("click", startOrSelectWeek);
 
 elements.dailyTipsBody.addEventListener("input", (event) => {
   const date = event.target.dataset.dailyTipDate;
@@ -2113,6 +2142,18 @@ function getFinishConfirmationMessage(record) {
     `Staff receiving payouts: ${staffReceivingPayouts}`,
     "",
     "This will save the completed week, clear current tips and shifts, and move the dashboard forward seven days.",
+  ].join("\n");
+}
+
+function getWeekSwitchConfirmationMessage(weekStart, existingWeek) {
+  const weekEnd = toDateInput(addDays(weekStart, 6));
+  return [
+    existingWeek ? "Load saved active week?" : "Start a blank active week?",
+    "",
+    `Current week: ${formatWeekRange(state.selectedWeekStart, toDateInput(addDays(state.selectedWeekStart, 6)))}`,
+    `Selected week: ${formatWeekRange(weekStart, weekEnd)}`,
+    "",
+    "Current week data will stay saved. Completed Weekly History will not be changed.",
   ].join("\n");
 }
 

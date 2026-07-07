@@ -258,6 +258,11 @@ button {
 
 .split-grid {
   margin-top: 0;
+  align-items: end;
+}
+
+.week-select-button {
+  align-self: end;
 }
 
 .inline-form {
