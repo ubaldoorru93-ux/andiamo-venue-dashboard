@@ -868,6 +868,32 @@ function resetStaffRowInputs(row, person) {
   });
 }
 
+function countActiveWeekShiftsForStaff(staffId) {
+  return Object.values(state.weeks).reduce((count, week) => {
+    const shifts = Array.isArray(week?.shifts) ? week.shifts : [];
+    return count + shifts.filter((shift) => shift.staffId === staffId).length;
+  }, 0);
+}
+
+function getDeleteStaffConfirmationMessage(person) {
+  const shiftCount = countActiveWeekShiftsForStaff(person.id);
+  const warning = shiftCount
+    ? [
+        "",
+        `Warning: ${person.name} is linked to ${shiftCount} active week shift${shiftCount === 1 ? "" : "s"}.`,
+        "Those shifts will remain, but deleting this staff record may affect active week shift names and calculations.",
+      ]
+    : [];
+
+  return [
+    `Delete staff member ${person.name}?`,
+    "",
+    "This permanently removes the staff record from the active staff list.",
+    "Completed Weekly History will not be changed.",
+    ...warning,
+  ].join("\n");
+}
+
 function getStaffAreas(person) {
   if (!person) return [];
   const savedAreas = Array.isArray(person.areas) ? person.areas : STAFF_AREAS;
@@ -1320,6 +1346,7 @@ function renderStaff() {
                 <button type="button" data-staff-toggle="${person.id}">
                   ${person.active === false ? "Reactivate" : "Deactivate"}
                 </button>
+                <button class="staff-delete-button" type="button" data-staff-delete="${person.id}">Delete</button>
               </div>
             </div>
           `;
@@ -1816,6 +1843,7 @@ elements.staffName.addEventListener("input", () => setStaffValidation());
 elements.staffList.addEventListener("click", (event) => {
   const saveId = event.target.dataset.staffSave;
   const toggleId = event.target.dataset.staffToggle;
+  const deleteId = event.target.dataset.staffDelete;
 
   if (saveId) {
     const person = state.staff.find((staff) => staff.id === saveId);
@@ -1849,6 +1877,17 @@ elements.staffList.addEventListener("click", (event) => {
     if (!person) return;
     person.active = person.active === false;
     showToast(person.active ? "Staff reactivated" : "Staff deactivated");
+    render();
+    return;
+  }
+
+  if (deleteId) {
+    const person = state.staff.find((staff) => staff.id === deleteId);
+    if (!person) return;
+    const confirmed = window.confirm(getDeleteStaffConfirmationMessage(person));
+    if (!confirmed) return;
+    state.staff = state.staff.filter((staff) => staff.id !== deleteId);
+    showToast("Staff deleted");
     render();
   }
 });
