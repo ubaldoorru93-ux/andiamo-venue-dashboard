@@ -813,6 +813,7 @@ textarea {
 }
 
 #summary,
+#weekly,
 #staff,
 #details,
 #history {
@@ -840,6 +841,27 @@ textarea {
   max-height: 112px;
   overflow-y: auto;
   padding-right: 2px;
+}
+
+#weekly .week-setup-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#weekly .daily-tips-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.daily-tips-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
 }
 
 #staff {
