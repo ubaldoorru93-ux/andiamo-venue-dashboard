@@ -255,6 +255,11 @@ button {
   color: var(--ink);
 }
 
+.clear-week-button {
+  background: #f2d6d2;
+  color: #7d2f28;
+}
+
 .primary-action {
   background: var(--green);
   color: #ffffff;

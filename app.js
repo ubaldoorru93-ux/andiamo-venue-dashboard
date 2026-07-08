@@ -23,6 +23,7 @@ const elements = {
   restoreData: document.querySelector("#restoreData"),
   restoreBackupFile: document.querySelector("#restoreBackupFile"),
   finishWeek: document.querySelector("#finishWeek"),
+  clearCurrentWeek: document.querySelector("#clearCurrentWeek"),
   weekStart: document.querySelector("#weekStart"),
   startSelectWeek: document.querySelector("#startSelectWeek"),
   dailyTipsBody: document.querySelector("#dailyTipsBody"),
@@ -2065,6 +2066,7 @@ elements.restoreBackupFile.addEventListener("change", async () => {
   elements.restoreBackupFile.value = "";
 });
 
+elements.clearCurrentWeek.addEventListener("click", clearCurrentWeek);
 elements.finishWeek.addEventListener("click", finishCurrentWeek);
 
 elements.weeklyHistoryList.addEventListener("click", (event) => {
@@ -2127,6 +2129,38 @@ function reopenCompletedWeek(completedWeek) {
   }
 }
 
+function clearCurrentWeek() {
+  if (isCurrentWeekEmpty()) {
+    showToast("Current week is already empty");
+    return;
+  }
+
+  const week = getCurrentWeek();
+  const calc = getCalculations();
+  const confirmed = window.confirm(getClearCurrentWeekConfirmationMessage(week, calc));
+  if (!confirmed) return;
+
+  const clearedWeek = createBlankWeek(week.fohSplit, week.bohSplit, state.selectedWeekStart);
+  const nextState = hydrateState({
+    ...state,
+    selectedWeekStart: state.selectedWeekStart,
+    weeks: {
+      ...state.weeks,
+      [state.selectedWeekStart]: clearedWeek,
+    },
+  });
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+    state = nextState;
+    editingShiftId = "";
+    showToast("Current week cleared");
+    render();
+  } catch {
+    showToast("Could not clear current week");
+  }
+}
+
 function finishCurrentWeek() {
   const week = getCurrentWeek();
   const calc = getCalculations();
@@ -2181,6 +2215,19 @@ function getFinishConfirmationMessage(record) {
     `Staff receiving payouts: ${staffReceivingPayouts}`,
     "",
     "This will save the completed week, clear current tips and shifts, and move the dashboard forward seven days.",
+  ].join("\n");
+}
+
+function getClearCurrentWeekConfirmationMessage(week, calc) {
+  return [
+    "Clear current week?",
+    "",
+    `Week: ${formatWeekRange(state.selectedWeekStart, toDateInput(addDays(state.selectedWeekStart, 6)))}`,
+    `Total tips currently entered: ${moneyFromCents(calc.totalTipsCents)}`,
+    `Shifts that will be removed: ${week.shifts.length}`,
+    "",
+    "Warning: active week tips and shifts will be permanently cleared.",
+    "Saved staff and completed Weekly History will not be changed.",
   ].join("\n");
 }
 
