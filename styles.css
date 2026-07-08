@@ -1144,6 +1144,159 @@ summary {
 }
 
 @media (max-width: 560px) {
+  html,
+  body,
+  .app-shell,
+  .sidebar,
+  .main-content,
+  .panel,
+  .content-grid,
+  .topbar,
+  .hero-band,
+  form,
+  table,
+  .table-wrap,
+  .daily-tips-wrap,
+  .history-table-wrap,
+  .list-row,
+  .staff-row,
+  .shift-row,
+  .history-week,
+  .daily-allocation-card,
+  .metric-card,
+  .builder-day-row {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  body {
+    font-size: 15px;
+    line-height: 1.35;
+  }
+
+  html,
+  body,
+  .app-shell,
+  .main-content {
+    overflow-x: hidden;
+  }
+
+  .sidebar {
+    padding: 6px 8px;
+  }
+
+  .brand {
+    gap: 7px;
+    padding-bottom: 6px;
+  }
+
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    font-size: 19px;
+  }
+
+  .brand h1 {
+    font-size: 16px;
+  }
+
+  .venue,
+  .eyebrow {
+    font-size: 10px;
+  }
+
+  .table-wrap,
+  .history-table-wrap {
+    overflow-x: auto;
+  }
+
+  .nav-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin-top: 6px;
+    overflow-x: visible;
+  }
+
+  .nav-item {
+    display: grid;
+    align-items: center;
+    justify-items: center;
+    min-height: 38px;
+    padding: 5px 4px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.1;
+    font-size: 11px;
+  }
+
+  .daily-tips-wrap {
+    overflow-x: hidden;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .split-grid,
+  .inline-form,
+  .shift-form,
+  .builder-defaults,
+  .builder-days,
+  .metric-grid,
+  .shift-edit-form,
+  .review-grid,
+  .review-form {
+    max-width: 100%;
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .main-content {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .panel {
+    padding: 10px;
+  }
+
+  .panel h3 {
+    font-size: 16px;
+  }
+
+  .topbar h2 {
+    margin-top: 0;
+    font-size: 19px;
+  }
+
+  .topbar,
+  .hero-band {
+    gap: 6px;
+  }
+
+  .date-panel {
+    padding: 5px 7px;
+  }
+
+  .daily-tips-table input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .history-week-heading,
+  .history-week-actions,
+  .staff-row-actions,
+  .shift-actions,
+  .hero-actions {
+    max-width: 100%;
+    min-width: 0;
+  }
+
   .topbar,
   .hero-band,
   .panel-header,
@@ -1158,6 +1311,48 @@ summary {
     flex-direction: column;
   }
 
+  .hero-band {
+    padding: 8px;
+  }
+
+  .hero-band strong {
+    font-size: 20px;
+  }
+
+  .hero-band span {
+    margin-top: 0;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    width: 100%;
+  }
+
+  .finish-button {
+    grid-column: 1 / -1;
+  }
+
+  input,
+  select,
+  textarea,
+  .primary-button,
+  .secondary-button,
+  .primary-action,
+  .list-row button,
+  .shift-actions button,
+  .history-week-actions button {
+    min-height: 38px;
+    font-size: 14px;
+    padding: 7px 9px;
+  }
+
+  label,
+  .eligibility-picker label {
+    font-size: 13px;
+  }
+
   .date-panel {
     text-align: left;
   }
@@ -1169,34 +1364,142 @@ summary {
     width: 100%;
   }
 
-  .hero-actions,
+  #weekly,
+  #summary,
+  #staff,
+  #details,
+  #history {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  #weekly .week-setup-form {
+    gap: 7px;
+  }
+
+  #weekly .split-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #weekly .split-grid label:first-child,
+  #weekly .week-select-button {
+    grid-column: 1 / -1;
+  }
+
+  #weekly .daily-tips-wrap {
+    max-height: 320px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  #summary .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  #summary .metric-card {
+    min-height: 48px;
+    padding: 6px;
+  }
+
+  #summary .metric-card:nth-child(3) {
+    border-color: rgba(31, 95, 72, 0.35);
+  }
+
+  #summary .table-wrap,
+  #summary .daily-allocation-list {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  #staff .inline-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  #staff .inline-form label {
+    grid-column: 1 / -1;
+  }
+
+  #staff .eligibility-picker {
+    min-height: 38px;
+  }
+
+  #staff .inline-form .secondary-button {
+    width: auto;
+    min-width: 96px;
+  }
+
+  #staffList {
+    max-height: 260px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .staff-row {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .staff-editor {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .staff-row-actions button {
+    min-height: 38px;
+  }
+
+  #shiftList,
+  #weeklyHistoryList {
+    max-height: 320px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
   .history-week-actions {
     width: 100%;
-    flex-direction: column;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+    justify-content: stretch;
   }
 
   .history-week-actions button {
     width: 100%;
+    min-height: 40px;
+    padding-inline: 5px;
+    font-size: 12px;
   }
 
   .staff-row-actions {
     width: 100%;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
   }
 
   .staff-row-actions button {
     width: 100%;
-  }
-
-  .hero-band strong {
-    font-size: 18px;
+    min-height: 38px;
+    padding-inline: 5px;
+    font-size: 12px;
   }
 
   .metric-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .shift-actions {
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: auto 1fr 1fr;
+    align-items: center;
+    justify-content: stretch;
+    width: 100%;
+    gap: 5px;
+  }
+
+  .shift-actions button {
+    width: 100%;
   }
 }
