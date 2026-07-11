@@ -401,6 +401,10 @@ textarea {
   display: none;
 }
 
+.print-report {
+  display: none;
+}
+
 .points-preview {
   display: grid;
   align-content: center;
@@ -1509,5 +1513,148 @@ summary {
 
   .shift-actions button {
     width: 100%;
+  }
+}
+
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff;
+    color: #111111;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    line-height: 1.25;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  .app-shell,
+  .toast {
+    display: none !important;
+  }
+
+  .print-report {
+    display: block !important;
+    width: 100%;
+  }
+
+  .print-report-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #111111;
+  }
+
+  .print-report h1,
+  .print-report h2,
+  .print-report h3,
+  .print-report p {
+    margin: 0;
+  }
+
+  .print-report h1 {
+    font-size: 18pt;
+  }
+
+  .print-report h2 {
+    font-size: 14pt;
+    text-align: right;
+  }
+
+  .print-report-header p {
+    margin-top: 2px;
+    font-size: 10pt;
+  }
+
+  .print-section {
+    margin-top: 10px;
+  }
+
+  .print-section h3 {
+    margin-bottom: 5px;
+    font-size: 11pt;
+  }
+
+  .print-totals {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0;
+    border-top: 1px solid #777777;
+    border-left: 1px solid #777777;
+  }
+
+  .print-totals div {
+    padding: 5px 6px;
+    border-right: 1px solid #777777;
+    border-bottom: 1px solid #777777;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-totals dt {
+    margin: 0 0 2px;
+    color: #444444;
+    font-size: 8.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .print-totals dd {
+    margin: 0;
+    font-size: 11pt;
+    font-weight: 700;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+  }
+
+  .print-table thead {
+    display: table-header-group;
+  }
+
+  .print-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-table th,
+  .print-table td {
+    padding: 4px 5px;
+    border: 1px solid #777777;
+    text-align: right;
+    vertical-align: top;
+  }
+
+  .print-table th:first-child,
+  .print-table td:first-child {
+    text-align: left;
+  }
+
+  .print-table th {
+    background: #eeeeee;
+    color: #111111;
+    font-weight: 700;
+  }
+
+  .print-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: 14px;
+    padding-top: 8px;
+    border-top: 1px solid #777777;
+    font-size: 9.5pt;
   }
 }

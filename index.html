@@ -49,6 +49,7 @@
           </div>
           <div class="hero-actions">
             <button id="exportExcel" class="primary-button" type="button">Export Excel</button>
+            <button id="printSummary" class="primary-button" type="button">Print Summary</button>
             <button id="backupData" class="primary-button" type="button">Backup Data</button>
             <button id="restoreData" class="primary-button" type="button">Restore Data</button>
             <input id="restoreBackupFile" class="hidden" type="file" accept="application/json,.json" />
@@ -361,7 +362,86 @@
       </main>
     </div>
 
+    <section id="printReport" class="print-report" aria-label="Printable weekly tip summary">
+      <header class="print-report-header">
+        <div>
+          <h1>Andiamo Trattoria</h1>
+          <p>Chippendale</p>
+        </div>
+        <div>
+          <h2>Weekly Tip Distribution</h2>
+          <p id="printWeekRange">-</p>
+        </div>
+      </header>
+
+      <section class="print-section">
+        <h3>Weekly Totals</h3>
+        <dl class="print-totals">
+          <div>
+            <dt>Card/Tyro tips</dt>
+            <dd id="printCardTips">$0.00</dd>
+          </div>
+          <div>
+            <dt>Cash tips</dt>
+            <dd id="printCashTips">$0.00</dd>
+          </div>
+          <div>
+            <dt>Total tips</dt>
+            <dd id="printTotalTips">$0.00</dd>
+          </div>
+          <div>
+            <dt>FOH split / pool</dt>
+            <dd id="printFohPool">70% / $0.00</dd>
+          </div>
+          <div>
+            <dt>BOH split / pool</dt>
+            <dd id="printBohPool">30% / $0.00</dd>
+          </div>
+          <div>
+            <dt>Total points</dt>
+            <dd id="printTotalPoints">0</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="print-section">
+        <h3>Daily Tips</h3>
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>Day and date</th>
+              <th>Card/Tyro tips</th>
+              <th>Cash tips</th>
+              <th>Daily total</th>
+            </tr>
+          </thead>
+          <tbody id="printDailyTipsBody"></tbody>
+        </table>
+      </section>
+
+      <section class="print-section">
+        <h3>Staff Payouts</h3>
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>Staff name</th>
+              <th>FOH points</th>
+              <th>BOH points</th>
+              <th>Total points</th>
+              <th>Final payout</th>
+            </tr>
+          </thead>
+          <tbody id="printStaffPayoutBody"></tbody>
+        </table>
+      </section>
+
+      <footer class="print-footer">
+        <p>Generated: <span id="printGeneratedDate">-</span></p>
+        <p>Checked by: ____________________</p>
+      </footer>
+    </section>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260708-clear-current-week"></script>
+    <script src="app.js?v=20260711-print-summary"></script>
   </body>
 </html>

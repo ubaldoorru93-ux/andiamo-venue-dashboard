@@ -7,6 +7,13 @@ const DEFAULT_BOH_CATEGORY = "Non-senior";
 const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const currency = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const dateFormat = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
+const generatedDateFormat = new Intl.DateTimeFormat("en-AU", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 const defaultState = {
   staff: [],
@@ -23,6 +30,7 @@ const elements = {
   heroTotalTips: document.querySelector("#heroTotalTips"),
   heroSplit: document.querySelector("#heroSplit"),
   exportExcel: document.querySelector("#exportExcel"),
+  printSummary: document.querySelector("#printSummary"),
   backupData: document.querySelector("#backupData"),
   restoreData: document.querySelector("#restoreData"),
   restoreBackupFile: document.querySelector("#restoreBackupFile"),
@@ -75,6 +83,16 @@ const elements = {
   dailyAllocationList: document.querySelector("#dailyAllocationList"),
   shiftList: document.querySelector("#shiftList"),
   weeklyHistoryList: document.querySelector("#weeklyHistoryList"),
+  printWeekRange: document.querySelector("#printWeekRange"),
+  printCardTips: document.querySelector("#printCardTips"),
+  printCashTips: document.querySelector("#printCashTips"),
+  printTotalTips: document.querySelector("#printTotalTips"),
+  printFohPool: document.querySelector("#printFohPool"),
+  printBohPool: document.querySelector("#printBohPool"),
+  printTotalPoints: document.querySelector("#printTotalPoints"),
+  printDailyTipsBody: document.querySelector("#printDailyTipsBody"),
+  printStaffPayoutBody: document.querySelector("#printStaffPayoutBody"),
+  printGeneratedDate: document.querySelector("#printGeneratedDate"),
   toast: document.querySelector("#toast"),
 };
 
@@ -1308,6 +1326,7 @@ function render() {
   renderShiftForm();
   renderBuilderForm();
   renderSummary(calc);
+  renderPrintReport(calc);
   renderShifts();
   renderWeeklyHistory();
   saveState();
@@ -1600,6 +1619,49 @@ function renderSummary(calc) {
     : `<tr><td colspan="5">Add shifts to calculate staff payouts.</td></tr>`;
 
   renderDailyAllocation(calc);
+}
+
+function renderPrintReport(calc) {
+  const week = getCurrentWeek();
+  const weekEnd = toDateInput(addDays(state.selectedWeekStart, 6));
+
+  elements.printWeekRange.textContent = formatWeekRange(state.selectedWeekStart, weekEnd);
+  elements.printCardTips.textContent = moneyFromCents(calc.cardTipsCents);
+  elements.printCashTips.textContent = moneyFromCents(calc.cashTipsCents);
+  elements.printTotalTips.textContent = moneyFromCents(calc.totalTipsCents);
+  elements.printFohPool.textContent = `${week.fohSplit}% / ${moneyFromCents(calc.fohPoolCents)}`;
+  elements.printBohPool.textContent = `${week.bohSplit}% / ${moneyFromCents(calc.bohPoolCents)}`;
+  elements.printTotalPoints.textContent = calc.totalPoints;
+  elements.printGeneratedDate.textContent = generatedDateFormat.format(new Date());
+
+  elements.printDailyTipsBody.innerHTML = calc.dailyAllocations
+    .map(
+      (day) => `
+        <tr>
+          <td>${escapeHtml(day.weekday)} ${formatShiftDate(day.date)}</td>
+          <td>${moneyFromCents(day.cardTipsCents)}</td>
+          <td>${moneyFromCents(day.cashTipsCents)}</td>
+          <td>${moneyFromCents(day.totalTipsCents)}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  elements.printStaffPayoutBody.innerHTML = calc.staffRows.length
+    ? calc.staffRows
+        .map(
+          (row) => `
+            <tr>
+              <td>${escapeHtml(row.name)}</td>
+              <td>${row.fohPoints}</td>
+              <td>${row.bohPoints}</td>
+              <td>${row.totalPoints}</td>
+              <td>${moneyFromCents(row.payoutCents)}</td>
+            </tr>
+          `
+        )
+        .join("")
+    : `<tr><td colspan="5">No staff payouts for this week.</td></tr>`;
 }
 
 function renderDailyAllocation(calc) {
@@ -2134,6 +2196,11 @@ elements.exportExcel.addEventListener("click", () => {
     return;
   }
   exportExcel(getCurrentWeekSnapshot(calc));
+});
+
+elements.printSummary.addEventListener("click", () => {
+  renderPrintReport(getCalculations());
+  window.print();
 });
 
 elements.backupData.addEventListener("click", downloadBackupData);
