@@ -1,5 +1,9 @@
 const STORAGE_KEY = "andiamo-tip-distribution-v1";
 const STAFF_AREAS = ["FOH", "BOH"];
+const FOH_ROLES = ["Manager", "Waiter"];
+const BOH_CATEGORIES = ["Senior", "Non-senior"];
+const DEFAULT_FOH_ROLE = "Waiter";
+const DEFAULT_BOH_CATEGORY = "Non-senior";
 const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const currency = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const dateFormat = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
@@ -101,6 +105,8 @@ function hydrateStaffMember(person) {
     name: String(person.name || ""),
     active: person.active !== false,
     areas: getStaffAreas(person),
+    defaultFohRole: getStaffDefaultFohRole(person),
+    defaultBohCategory: getStaffDefaultBohCategory(person),
   };
 }
 
@@ -862,11 +868,15 @@ function setStaffRowValidation(row, message = "") {
 function resetStaffRowInputs(row, person) {
   const nameInput = row.querySelector("[data-staff-name]");
   const areaInputs = Array.from(row.querySelectorAll("[data-staff-area]"));
+  const fohRoleSelect = row.querySelector("[data-staff-default-foh]");
+  const bohCategorySelect = row.querySelector("[data-staff-default-boh]");
   const savedAreas = getStaffAreas(person);
   if (nameInput) nameInput.value = person.name;
   areaInputs.forEach((input) => {
     input.checked = savedAreas.includes(input.value);
   });
+  if (fohRoleSelect) fohRoleSelect.value = getStaffDefaultFohRole(person);
+  if (bohCategorySelect) bohCategorySelect.value = getStaffDefaultBohCategory(person);
 }
 
 function countActiveWeekShiftsForStaff(staffId) {
@@ -906,6 +916,28 @@ function areaLabel(area) {
   return area === "FOH" ? "FOH" : "BOH";
 }
 
+function getStaffDefaultFohRole(person) {
+  return FOH_ROLES.includes(person?.defaultFohRole) ? person.defaultFohRole : DEFAULT_FOH_ROLE;
+}
+
+function getStaffDefaultBohCategory(person) {
+  return BOH_CATEGORIES.includes(person?.defaultBohCategory) ? person.defaultBohCategory : DEFAULT_BOH_CATEGORY;
+}
+
+function applyShiftStaffDefaults() {
+  const selectedStaff = getSelectedStaffMember();
+  if (!selectedStaff) return;
+  elements.fohRole.value = getStaffDefaultFohRole(selectedStaff);
+  elements.bohCategory.value = getStaffDefaultBohCategory(selectedStaff);
+}
+
+function applyBuilderStaffDefaults() {
+  const selectedStaff = getSelectedBuilderStaffMember();
+  if (!selectedStaff) return;
+  elements.builderFohRole.value = getStaffDefaultFohRole(selectedStaff);
+  elements.builderBohCategory.value = getStaffDefaultBohCategory(selectedStaff);
+}
+
 function getSelectedStaffMember() {
   return state.staff.find((person) => person.id === elements.shiftStaff.value);
 }
@@ -913,10 +945,10 @@ function getSelectedStaffMember() {
 function currentShiftDraft() {
   return {
     area: elements.shiftArea.value,
-    fohRole: elements.fohRole.value || "Manager",
+    fohRole: elements.fohRole.value || DEFAULT_FOH_ROLE,
     fohLevel: elements.fohLevel.value || "high",
     fohDuration: elements.fohDuration.value || "over",
-    bohCategory: elements.bohCategory.value || "Senior",
+    bohCategory: elements.bohCategory.value || DEFAULT_BOH_CATEGORY,
     bohDuration: elements.bohDuration.value || "full",
   };
 }
@@ -928,10 +960,10 @@ function getSelectedBuilderStaffMember() {
 function currentBuilderDefaultDraft() {
   return {
     area: elements.builderArea.value,
-    fohRole: elements.builderFohRole.value || "Manager",
+    fohRole: elements.builderFohRole.value || DEFAULT_FOH_ROLE,
     fohLevel: elements.builderFohLevel.value || "high",
     fohDuration: elements.builderFohDuration.value || "over",
-    bohCategory: elements.builderBohCategory.value || "Senior",
+    bohCategory: elements.builderBohCategory.value || DEFAULT_BOH_CATEGORY,
     bohDuration: elements.builderBohDuration.value || "full",
   };
 }
@@ -1317,12 +1349,18 @@ function renderStaff() {
   if (activeStaff.some((person) => person.id === selectedStaffId)) {
     elements.shiftStaff.value = selectedStaffId;
   }
+  if (elements.shiftStaff.value && elements.shiftStaff.value !== selectedStaffId) {
+    applyShiftStaffDefaults();
+  }
 
   elements.staffList.innerHTML = state.staff.length
     ? state.staff
         .map(
           (person) => {
             const areas = getStaffAreas(person);
+            const isActive = person.active !== false;
+            const fohDefault = getStaffDefaultFohRole(person);
+            const bohDefault = getStaffDefaultBohCategory(person);
             return `
             <div class="list-row staff-row ${person.active === false ? "muted-row" : ""}">
               <div class="staff-editor">
@@ -1340,6 +1378,26 @@ function renderStaff() {
                     `
                   ).join("")}
                 </div>
+                ${
+                  isActive && areas.includes("FOH")
+                    ? `<label class="staff-default-field">
+                        Default FOH Role
+                        <select data-staff-default-foh="${person.id}" aria-label="Default FOH role for ${escapeHtml(person.name)}">
+                          ${FOH_ROLES.map((role) => `<option value="${role}" ${role === fohDefault ? "selected" : ""}>${role}</option>`).join("")}
+                        </select>
+                      </label>`
+                    : ""
+                }
+                ${
+                  isActive && areas.includes("BOH")
+                    ? `<label class="staff-default-field">
+                        Default BOH Category
+                        <select data-staff-default-boh="${person.id}" aria-label="Default BOH category for ${escapeHtml(person.name)}">
+                          ${BOH_CATEGORIES.map((category) => `<option value="${category}" ${category === bohDefault ? "selected" : ""}>${category}</option>`).join("")}
+                        </select>
+                      </label>`
+                    : ""
+                }
                 <p class="validation-message staff-card-validation hidden" data-staff-validation="${person.id}" role="alert"></p>
               </div>
               <div class="staff-row-actions">
@@ -1386,6 +1444,9 @@ function renderBuilderForm() {
     : `<option value="">Add staff first</option>`;
   if (activeStaff.some((person) => person.id === selectedStaffId)) {
     elements.builderStaff.value = selectedStaffId;
+  }
+  if (elements.builderStaff.value && elements.builderStaff.value !== selectedStaffId) {
+    applyBuilderStaffDefaults();
   }
 
   renderBuilderAreaOptions();
@@ -1829,7 +1890,14 @@ elements.staffForm.addEventListener("submit", (event) => {
     setStaffValidation(validationMessage === "Enter a staff name before saving." ? "Enter a staff name before adding." : validationMessage);
     return;
   }
-  state.staff.push({ id: uid("staff"), name, active: true, areas });
+  state.staff.push({
+    id: uid("staff"),
+    name,
+    active: true,
+    areas,
+    defaultFohRole: DEFAULT_FOH_ROLE,
+    defaultBohCategory: DEFAULT_BOH_CATEGORY,
+  });
   elements.staffName.value = "";
   elements.staffFoh.checked = true;
   elements.staffBoh.checked = true;
@@ -1852,6 +1920,8 @@ elements.staffList.addEventListener("click", (event) => {
     if (!person || !row) return;
     const nameInput = row.querySelector("[data-staff-name]");
     const areaInputs = Array.from(row.querySelectorAll("[data-staff-area]"));
+    const fohRoleSelect = row.querySelector("[data-staff-default-foh]");
+    const bohCategorySelect = row.querySelector("[data-staff-default-boh]");
     const name = cleanStaffName(nameInput.value);
     const areas = areaInputs.filter((input) => input.checked).map((input) => input.value);
     const validationMessage = validateStaffDetails(name, areas, saveId);
@@ -1866,6 +1936,10 @@ elements.staffList.addEventListener("click", (event) => {
 
     person.name = name;
     person.areas = STAFF_AREAS.filter((area) => areas.includes(area));
+    person.defaultFohRole = FOH_ROLES.includes(fohRoleSelect?.value) ? fohRoleSelect.value : getStaffDefaultFohRole(person);
+    person.defaultBohCategory = BOH_CATEGORIES.includes(bohCategorySelect?.value)
+      ? bohCategorySelect.value
+      : getStaffDefaultBohCategory(person);
     setStaffValidation();
     setStaffRowValidation(row);
     showToast("Staff updated");
@@ -1893,13 +1967,21 @@ elements.staffList.addEventListener("click", (event) => {
   }
 });
 
+elements.shiftStaff.addEventListener("change", () => {
+  applyShiftStaffDefaults();
+  renderShiftForm();
+});
+
 ["change", "input"].forEach((eventName) => {
-  [elements.shiftStaff, elements.shiftArea, elements.fohRole, elements.fohLevel, elements.fohDuration, elements.bohCategory, elements.bohDuration].forEach((field) => {
+  [elements.shiftArea, elements.fohRole, elements.fohLevel, elements.fohDuration, elements.bohCategory, elements.bohDuration].forEach((field) => {
     field.addEventListener(eventName, renderShiftForm);
   });
 });
 
-elements.builderStaff.addEventListener("change", renderBuilderForm);
+elements.builderStaff.addEventListener("change", () => {
+  applyBuilderStaffDefaults();
+  renderBuilderForm();
+});
 elements.builderArea.addEventListener("change", () => {
   renderBuilderDefaultFields();
   renderBuilderDays();

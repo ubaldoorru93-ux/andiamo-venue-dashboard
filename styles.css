@@ -512,6 +512,14 @@ textarea {
   width: 100%;
 }
 
+.staff-default-field {
+  min-width: 0;
+}
+
+.staff-default-field select {
+  min-width: 0;
+}
+
 .staff-row-actions {
   display: grid;
   grid-template-columns: minmax(54px, 0.7fr) minmax(88px, 1fr) minmax(58px, 0.75fr);
