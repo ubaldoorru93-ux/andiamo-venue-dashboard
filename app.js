@@ -1,9 +1,11 @@
 const STORAGE_KEY = "andiamo-tip-distribution-v1";
 const STAFF_AREAS = ["FOH", "BOH"];
 const FOH_ROLES = ["Manager", "Waiter"];
-const BOH_CATEGORIES = ["Senior", "Non-senior"];
+const BOH_CONTRIBUTIONS = ["Lead", "Experienced", "Support"];
+const BOH_SHIFT_SIZES = ["full", "reduced"];
 const DEFAULT_FOH_ROLE = "Waiter";
-const DEFAULT_BOH_CATEGORY = "Non-senior";
+const DEFAULT_BOH_CONTRIBUTION = "Support";
+const DEFAULT_BOH_SHIFT_SIZE = "full";
 const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const currency = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const dateFormat = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
@@ -59,8 +61,8 @@ const elements = {
   fohRole: document.querySelector("#fohRole"),
   fohLevel: document.querySelector("#fohLevel"),
   fohDuration: document.querySelector("#fohDuration"),
-  bohCategory: document.querySelector("#bohCategory"),
-  bohDuration: document.querySelector("#bohDuration"),
+  bohContribution: document.querySelector("#bohContribution"),
+  bohShiftSize: document.querySelector("#bohShiftSize"),
   shiftPointsPreview: document.querySelector("#shiftPointsPreview"),
   builderForm: document.querySelector("#builderForm"),
   builderStaff: document.querySelector("#builderStaff"),
@@ -70,8 +72,8 @@ const elements = {
   builderFohRole: document.querySelector("#builderFohRole"),
   builderFohLevel: document.querySelector("#builderFohLevel"),
   builderFohDuration: document.querySelector("#builderFohDuration"),
-  builderBohCategory: document.querySelector("#builderBohCategory"),
-  builderBohDuration: document.querySelector("#builderBohDuration"),
+  builderBohContribution: document.querySelector("#builderBohContribution"),
+  builderBohShiftSize: document.querySelector("#builderBohShiftSize"),
   builderDays: document.querySelector("#builderDays"),
   summaryCard: document.querySelector("#summaryCard"),
   summaryCash: document.querySelector("#summaryCash"),
@@ -110,21 +112,79 @@ function hydrateState(nextState) {
     ...defaultState,
     ...nextState,
     staff: Array.isArray(nextState.staff) ? nextState.staff.map(hydrateStaffMember) : [],
-    weeks: nextState.weeks && typeof nextState.weeks === "object" ? nextState.weeks : {},
+    weeks: hydrateWeeks(nextState.weeks),
     completedWeeks: Array.isArray(nextState.completedWeeks) ? nextState.completedWeeks.map(hydrateCompletedWeek) : [],
     selectedWeekStart: nextState.selectedWeekStart || defaultState.selectedWeekStart,
   };
 }
 
-function hydrateStaffMember(person) {
+function hydrateWeeks(weeks) {
+  if (!weeks || typeof weeks !== "object" || Array.isArray(weeks)) return {};
+  return Object.fromEntries(Object.entries(weeks).map(([weekStart, week]) => [weekStart, hydrateWeek(week, weekStart)]));
+}
+
+function normalizeBohContribution(value) {
+  if (BOH_CONTRIBUTIONS.includes(value)) return value;
+  if (value === "Senior") return "Lead";
+  if (value === "Non-senior") return "Support";
+  return DEFAULT_BOH_CONTRIBUTION;
+}
+
+function normalizeBohShiftSize(value) {
+  if (BOH_SHIFT_SIZES.includes(value)) return value;
+  if (value === "half") return "reduced";
+  return DEFAULT_BOH_SHIFT_SIZE;
+}
+
+function getBohModelFromLegacy(category, duration) {
+  if (category === "Senior" && duration === "full") {
+    return { bohContribution: "Lead", bohShiftSize: "full" };
+  }
+  if (category === "Senior" && duration === "half") {
+    return { bohContribution: "Experienced", bohShiftSize: "reduced" };
+  }
+  if (category === "Non-senior" && duration === "full") {
+    return { bohContribution: "Support", bohShiftSize: "full" };
+  }
+  if (category === "Non-senior" && duration === "half") {
+    return { bohContribution: "Support", bohShiftSize: "reduced" };
+  }
   return {
-    ...person,
+    bohContribution: normalizeBohContribution(category),
+    bohShiftSize: normalizeBohShiftSize(duration),
+  };
+}
+
+function getBohModel(shift) {
+  if (BOH_CONTRIBUTIONS.includes(shift?.bohContribution) || BOH_SHIFT_SIZES.includes(shift?.bohShiftSize)) {
+    return {
+      bohContribution: normalizeBohContribution(shift.bohContribution || shift.bohCategory),
+      bohShiftSize: normalizeBohShiftSize(shift.bohShiftSize || shift.bohDuration),
+    };
+  }
+  return getBohModelFromLegacy(shift?.bohCategory, shift?.bohDuration);
+}
+
+function hydrateActiveShift(shift) {
+  if (!shift || typeof shift !== "object") return shift;
+  if (shift.area !== "BOH") return shift;
+  const { bohCategory, bohDuration, ...rest } = shift;
+  return {
+    ...rest,
+    ...getBohModel(shift),
+  };
+}
+
+function hydrateStaffMember(person) {
+  const { defaultBohCategory, ...rest } = person;
+  return {
+    ...rest,
     id: person.id || uid("staff"),
     name: String(person.name || ""),
     active: person.active !== false,
     areas: getStaffAreas(person),
     defaultFohRole: getStaffDefaultFohRole(person),
-    defaultBohCategory: getStaffDefaultBohCategory(person),
+    defaultBohContribution: getStaffDefaultBohContribution(person),
   };
 }
 
@@ -290,6 +350,7 @@ function getCurrentWeek() {
 }
 
 function hydrateWeek(week, weekStart) {
+  const savedWeek = week && typeof week === "object" ? week : {};
   const nextWeek = {
     cardTips: 0,
     cashTips: 0,
@@ -298,10 +359,10 @@ function hydrateWeek(week, weekStart) {
     shifts: [],
     dailyTipsMigratedFromWeekly: false,
     dailyTipsReviewed: true,
-    ...week,
+    ...savedWeek,
   };
-  const hadDailyTips = Array.isArray(week.dailyTips) && week.dailyTips.length > 0;
-  nextWeek.shifts = Array.isArray(nextWeek.shifts) ? nextWeek.shifts : [];
+  const hadDailyTips = Array.isArray(savedWeek.dailyTips) && savedWeek.dailyTips.length > 0;
+  nextWeek.shifts = Array.isArray(nextWeek.shifts) ? nextWeek.shifts.map(hydrateActiveShift) : [];
   nextWeek.dailyTips = normalizeDailyTips(nextWeek, weekStart, hadDailyTips);
   const weeklyTotals = getDailyTipTotals(nextWeek.dailyTips);
   nextWeek.cardTips = centsToDollars(weeklyTotals.cardTipsCents);
@@ -430,12 +491,13 @@ function getFohPoints(role, level, duration) {
   return map[role][duration][level];
 }
 
-function getBohPoints(category, duration) {
+function getBohPoints(contribution, shiftSize) {
   const map = {
-    Senior: { full: 4, half: 2 },
-    "Non-senior": { full: 2, half: 1 },
+    Lead: { full: 4, reduced: 3 },
+    Experienced: { full: 3, reduced: 2 },
+    Support: { full: 2, reduced: 1 },
   };
-  return map[category][duration];
+  return map[contribution]?.[shiftSize] || 0;
 }
 
 function calculateShiftPoints(shift) {
@@ -443,7 +505,8 @@ function calculateShiftPoints(shift) {
     return getFohPoints(shift.fohRole, shift.fohLevel, shift.fohDuration);
   }
   if (shift.area === "BOH") {
-    return getBohPoints(shift.bohCategory, shift.bohDuration);
+    const { bohContribution, bohShiftSize } = getBohModel(shift);
+    return getBohPoints(bohContribution, bohShiftSize);
   }
   return 0;
 }
@@ -779,7 +842,8 @@ function getShiftDetail(shift) {
   if (shift.area === "FOH") {
     return `${shift.fohRole}, ${capitalize(shift.fohLevel)}, ${shift.fohDuration === "over" ? "Over 7h" : "Under 7h"}`;
   }
-  return `${shift.bohCategory}, ${capitalize(shift.bohDuration)}`;
+  const { bohContribution, bohShiftSize } = getBohModel(shift);
+  return `${bohContribution}, ${capitalize(bohShiftSize)}`;
 }
 
 function hasDailyAllocationData(record) {
@@ -887,14 +951,14 @@ function resetStaffRowInputs(row, person) {
   const nameInput = row.querySelector("[data-staff-name]");
   const areaInputs = Array.from(row.querySelectorAll("[data-staff-area]"));
   const fohRoleSelect = row.querySelector("[data-staff-default-foh]");
-  const bohCategorySelect = row.querySelector("[data-staff-default-boh]");
+  const bohContributionSelect = row.querySelector("[data-staff-default-boh]");
   const savedAreas = getStaffAreas(person);
   if (nameInput) nameInput.value = person.name;
   areaInputs.forEach((input) => {
     input.checked = savedAreas.includes(input.value);
   });
   if (fohRoleSelect) fohRoleSelect.value = getStaffDefaultFohRole(person);
-  if (bohCategorySelect) bohCategorySelect.value = getStaffDefaultBohCategory(person);
+  if (bohContributionSelect) bohContributionSelect.value = getStaffDefaultBohContribution(person);
 }
 
 function countActiveWeekShiftsForStaff(staffId) {
@@ -938,22 +1002,22 @@ function getStaffDefaultFohRole(person) {
   return FOH_ROLES.includes(person?.defaultFohRole) ? person.defaultFohRole : DEFAULT_FOH_ROLE;
 }
 
-function getStaffDefaultBohCategory(person) {
-  return BOH_CATEGORIES.includes(person?.defaultBohCategory) ? person.defaultBohCategory : DEFAULT_BOH_CATEGORY;
+function getStaffDefaultBohContribution(person) {
+  return normalizeBohContribution(person?.defaultBohContribution || person?.defaultBohCategory);
 }
 
 function applyShiftStaffDefaults() {
   const selectedStaff = getSelectedStaffMember();
   if (!selectedStaff) return;
   elements.fohRole.value = getStaffDefaultFohRole(selectedStaff);
-  elements.bohCategory.value = getStaffDefaultBohCategory(selectedStaff);
+  elements.bohContribution.value = getStaffDefaultBohContribution(selectedStaff);
 }
 
 function applyBuilderStaffDefaults() {
   const selectedStaff = getSelectedBuilderStaffMember();
   if (!selectedStaff) return;
   elements.builderFohRole.value = getStaffDefaultFohRole(selectedStaff);
-  elements.builderBohCategory.value = getStaffDefaultBohCategory(selectedStaff);
+  elements.builderBohContribution.value = getStaffDefaultBohContribution(selectedStaff);
 }
 
 function getSelectedStaffMember() {
@@ -966,8 +1030,8 @@ function currentShiftDraft() {
     fohRole: elements.fohRole.value || DEFAULT_FOH_ROLE,
     fohLevel: elements.fohLevel.value || "high",
     fohDuration: elements.fohDuration.value || "over",
-    bohCategory: elements.bohCategory.value || DEFAULT_BOH_CATEGORY,
-    bohDuration: elements.bohDuration.value || "full",
+    bohContribution: elements.bohContribution.value || DEFAULT_BOH_CONTRIBUTION,
+    bohShiftSize: elements.bohShiftSize.value || DEFAULT_BOH_SHIFT_SIZE,
   };
 }
 
@@ -981,8 +1045,8 @@ function currentBuilderDefaultDraft() {
     fohRole: elements.builderFohRole.value || DEFAULT_FOH_ROLE,
     fohLevel: elements.builderFohLevel.value || "high",
     fohDuration: elements.builderFohDuration.value || "over",
-    bohCategory: elements.builderBohCategory.value || DEFAULT_BOH_CATEGORY,
-    bohDuration: elements.builderBohDuration.value || "full",
+    bohContribution: elements.builderBohContribution.value || DEFAULT_BOH_CONTRIBUTION,
+    bohShiftSize: elements.builderBohShiftSize.value || DEFAULT_BOH_SHIFT_SIZE,
   };
 }
 
@@ -996,22 +1060,24 @@ function getBuilderDayDraft(row) {
     fohRole: row.querySelector("[data-builder-foh-role]")?.value || defaultDraft.fohRole,
     fohLevel: row.querySelector("[data-builder-foh-level]")?.value || defaultDraft.fohLevel,
     fohDuration: row.querySelector("[data-builder-foh-duration]")?.value || defaultDraft.fohDuration,
-    bohCategory: row.querySelector("[data-builder-boh-category]")?.value || defaultDraft.bohCategory,
-    bohDuration: row.querySelector("[data-builder-boh-duration]")?.value || defaultDraft.bohDuration,
+    bohContribution: row.querySelector("[data-builder-boh-contribution]")?.value || defaultDraft.bohContribution,
+    bohShiftSize: row.querySelector("[data-builder-boh-shift-size]")?.value || defaultDraft.bohShiftSize,
   };
 }
 
 function getComparableShiftKey(shift) {
-  const roleOrCategory = shift.area === "FOH" ? shift.fohRole : shift.bohCategory;
+  const bohModel = shift.area === "BOH" ? getBohModel(shift) : {};
+  const roleOrContribution = shift.area === "FOH" ? shift.fohRole : bohModel.bohContribution;
   const level = shift.area === "FOH" ? shift.fohLevel : "";
-  const duration = shift.area === "FOH" ? shift.fohDuration : shift.bohDuration;
-  return [shift.staffId, shift.date, shift.area, roleOrCategory, level, duration].join("|");
+  const durationOrSize = shift.area === "FOH" ? shift.fohDuration : bohModel.bohShiftSize;
+  return [shift.staffId, shift.date, shift.area, roleOrContribution, level, durationOrSize].join("|");
 }
 
 function getShiftDescription(shift) {
+  const bohModel = shift.area === "BOH" ? getBohModel(shift) : {};
   return shift.area === "FOH"
     ? `${shift.area} ${shift.fohRole}, ${capitalize(shift.fohLevel)}, ${shift.fohDuration === "over" ? "Over 7h" : "Under 7h"}`
-    : `${shift.area} ${shift.bohCategory}, ${capitalize(shift.bohDuration)}`;
+    : `${shift.area} ${bohModel.bohContribution}, ${capitalize(bohModel.bohShiftSize)}`;
 }
 
 function renderShiftStaffOptions(selectedStaffId) {
@@ -1042,8 +1108,8 @@ function getShiftDraftFromEditRow(row) {
     fohRole: row.querySelector("[data-edit-foh-role]")?.value || "Manager",
     fohLevel: row.querySelector("[data-edit-foh-level]")?.value || "high",
     fohDuration: row.querySelector("[data-edit-foh-duration]")?.value || "over",
-    bohCategory: row.querySelector("[data-edit-boh-category]")?.value || "Senior",
-    bohDuration: row.querySelector("[data-edit-boh-duration]")?.value || "full",
+    bohContribution: row.querySelector("[data-edit-boh-contribution]")?.value || DEFAULT_BOH_CONTRIBUTION,
+    bohShiftSize: row.querySelector("[data-edit-boh-shift-size]")?.value || DEFAULT_BOH_SHIFT_SIZE,
   };
 }
 
@@ -1092,6 +1158,7 @@ function updateShiftEditRow(row) {
 function renderShiftEditForm(shift) {
   const sunday = toDateInput(addDays(state.selectedWeekStart, 6));
   const isFoh = shift.area === "FOH";
+  const bohModel = getBohModel(shift);
   const points = calculateShiftPoints(shift);
 
   return `
@@ -1133,17 +1200,18 @@ function renderShiftEditForm(shift) {
       </div>
       <div class="conditional-fields shift-edit-boh ${isFoh ? "hidden" : ""}" data-edit-boh-fields>
         <label>
-          Category
-          <select data-edit-boh-category>
-            <option value="Senior" ${shift.bohCategory === "Senior" ? "selected" : ""}>Senior</option>
-            <option value="Non-senior" ${shift.bohCategory === "Non-senior" ? "selected" : ""}>Non-senior</option>
+          Contribution
+          <select data-edit-boh-contribution>
+            ${BOH_CONTRIBUTIONS.map(
+              (contribution) => `<option value="${contribution}" ${bohModel.bohContribution === contribution ? "selected" : ""}>${contribution}</option>`
+            ).join("")}
           </select>
         </label>
         <label>
-          Duration
-          <select data-edit-boh-duration>
-            <option value="full" ${shift.bohDuration === "full" ? "selected" : ""}>Full</option>
-            <option value="half" ${shift.bohDuration === "half" ? "selected" : ""}>Half</option>
+          Shift size
+          <select data-edit-boh-shift-size>
+            <option value="full" ${bohModel.bohShiftSize === "full" ? "selected" : ""}>Full</option>
+            <option value="reduced" ${bohModel.bohShiftSize === "reduced" ? "selected" : ""}>Reduced</option>
           </select>
         </label>
       </div>
@@ -1200,8 +1268,9 @@ function createShiftCopyForCurrentWeek(shift, sourceWeekStart) {
   const sourceStartDate = parseLocalDate(sourceWeekStart);
   const dayOffset = Math.round((sourceDate.getTime() - sourceStartDate.getTime()) / 86400000);
   if (!Number.isFinite(dayOffset) || dayOffset < 0 || dayOffset > 6) return null;
+  const bohModel = getBohModel(shift);
 
-  return {
+  return hydrateActiveShift({
     id: uid("shift"),
     date: toDateInput(addDays(state.selectedWeekStart, dayOffset)),
     staffId: shift.staffId,
@@ -1209,9 +1278,8 @@ function createShiftCopyForCurrentWeek(shift, sourceWeekStart) {
     fohRole: shift.fohRole || "Manager",
     fohLevel: shift.fohLevel || "high",
     fohDuration: shift.fohDuration || "over",
-    bohCategory: shift.bohCategory || "Senior",
-    bohDuration: shift.bohDuration || "full",
-  };
+    ...bohModel,
+  });
 }
 
 function getCopyPreviousWeekConfirmationMessage(source, shifts) {
@@ -1379,7 +1447,7 @@ function renderStaff() {
             const areas = getStaffAreas(person);
             const isActive = person.active !== false;
             const fohDefault = getStaffDefaultFohRole(person);
-            const bohDefault = getStaffDefaultBohCategory(person);
+            const bohDefault = getStaffDefaultBohContribution(person);
             return `
             <div class="list-row staff-row ${person.active === false ? "muted-row" : ""}">
               <div class="staff-editor">
@@ -1410,9 +1478,11 @@ function renderStaff() {
                 ${
                   isActive && areas.includes("BOH")
                     ? `<label class="staff-default-field">
-                        Default BOH Category
-                        <select data-staff-default-boh="${person.id}" aria-label="Default BOH category for ${escapeHtml(person.name)}">
-                          ${BOH_CATEGORIES.map((category) => `<option value="${category}" ${category === bohDefault ? "selected" : ""}>${category}</option>`).join("")}
+                        Default BOH Contribution
+                        <select data-staff-default-boh="${person.id}" aria-label="Default BOH contribution for ${escapeHtml(person.name)}">
+                          ${BOH_CONTRIBUTIONS.map(
+                            (contribution) => `<option value="${contribution}" ${contribution === bohDefault ? "selected" : ""}>${contribution}</option>`
+                          ).join("")}
                         </select>
                       </label>`
                     : ""
@@ -1561,17 +1631,18 @@ function renderBuilderDays() {
             </div>
             <div class="builder-boh-override ${draft.area === "BOH" ? "" : "hidden"}">
               <label>
-                Category
-                <select data-builder-boh-category>
-                  <option value="Senior" ${draft.bohCategory === "Senior" ? "selected" : ""}>Senior</option>
-                  <option value="Non-senior" ${draft.bohCategory === "Non-senior" ? "selected" : ""}>Non-senior</option>
+                Contribution
+                <select data-builder-boh-contribution>
+                  ${BOH_CONTRIBUTIONS.map(
+                    (contribution) => `<option value="${contribution}" ${draft.bohContribution === contribution ? "selected" : ""}>${contribution}</option>`
+                  ).join("")}
                 </select>
               </label>
               <label>
-                Duration
-                <select data-builder-boh-duration>
-                  <option value="full" ${draft.bohDuration === "full" ? "selected" : ""}>Full</option>
-                  <option value="half" ${draft.bohDuration === "half" ? "selected" : ""}>Half</option>
+                Shift size
+                <select data-builder-boh-shift-size>
+                  <option value="full" ${draft.bohShiftSize === "full" ? "selected" : ""}>Full</option>
+                  <option value="reduced" ${draft.bohShiftSize === "reduced" ? "selected" : ""}>Reduced</option>
                 </select>
               </label>
             </div>
@@ -1958,7 +2029,7 @@ elements.staffForm.addEventListener("submit", (event) => {
     active: true,
     areas,
     defaultFohRole: DEFAULT_FOH_ROLE,
-    defaultBohCategory: DEFAULT_BOH_CATEGORY,
+    defaultBohContribution: DEFAULT_BOH_CONTRIBUTION,
   });
   elements.staffName.value = "";
   elements.staffFoh.checked = true;
@@ -1983,7 +2054,7 @@ elements.staffList.addEventListener("click", (event) => {
     const nameInput = row.querySelector("[data-staff-name]");
     const areaInputs = Array.from(row.querySelectorAll("[data-staff-area]"));
     const fohRoleSelect = row.querySelector("[data-staff-default-foh]");
-    const bohCategorySelect = row.querySelector("[data-staff-default-boh]");
+    const bohContributionSelect = row.querySelector("[data-staff-default-boh]");
     const name = cleanStaffName(nameInput.value);
     const areas = areaInputs.filter((input) => input.checked).map((input) => input.value);
     const validationMessage = validateStaffDetails(name, areas, saveId);
@@ -1999,9 +2070,10 @@ elements.staffList.addEventListener("click", (event) => {
     person.name = name;
     person.areas = STAFF_AREAS.filter((area) => areas.includes(area));
     person.defaultFohRole = FOH_ROLES.includes(fohRoleSelect?.value) ? fohRoleSelect.value : getStaffDefaultFohRole(person);
-    person.defaultBohCategory = BOH_CATEGORIES.includes(bohCategorySelect?.value)
-      ? bohCategorySelect.value
-      : getStaffDefaultBohCategory(person);
+    person.defaultBohContribution = BOH_CONTRIBUTIONS.includes(bohContributionSelect?.value)
+      ? bohContributionSelect.value
+      : getStaffDefaultBohContribution(person);
+    delete person.defaultBohCategory;
     setStaffValidation();
     setStaffRowValidation(row);
     showToast("Staff updated");
@@ -2035,7 +2107,7 @@ elements.shiftStaff.addEventListener("change", () => {
 });
 
 ["change", "input"].forEach((eventName) => {
-  [elements.shiftArea, elements.fohRole, elements.fohLevel, elements.fohDuration, elements.bohCategory, elements.bohDuration].forEach((field) => {
+  [elements.shiftArea, elements.fohRole, elements.fohLevel, elements.fohDuration, elements.bohContribution, elements.bohShiftSize].forEach((field) => {
     field.addEventListener(eventName, renderShiftForm);
   });
 });
@@ -2048,7 +2120,7 @@ elements.builderArea.addEventListener("change", () => {
   renderBuilderDefaultFields();
   renderBuilderDays();
 });
-[elements.builderFohRole, elements.builderFohLevel, elements.builderFohDuration, elements.builderBohCategory, elements.builderBohDuration].forEach((field) => {
+[elements.builderFohRole, elements.builderFohLevel, elements.builderFohDuration, elements.builderBohContribution, elements.builderBohShiftSize].forEach((field) => {
   field.addEventListener("change", renderBuilderDays);
 });
 
@@ -2488,15 +2560,16 @@ function exportExcel(record) {
   record.staffPayouts.forEach((row) => rows.push([row.name, row.fohPoints, row.bohPoints, row.totalPoints, row.payout]));
   rows.push([]);
   rows.push(["Detailed shifts"]);
-  rows.push(["Date", "Staff", "Area", "Role/category", "High/low", "Duration", "Points"]);
+  rows.push(["Date", "Staff", "Area", "Role/contribution", "High/low", "Duration/shift size", "Points"]);
   record.shifts.forEach((shift) => {
+    const bohModel = shift.area === "BOH" ? getBohModel(shift) : {};
     rows.push([
       shift.date,
       shift.staffName || getStaffName(shift.staffId),
       shift.area,
-      shift.area === "FOH" ? shift.fohRole : shift.bohCategory,
+      shift.area === "FOH" ? shift.fohRole : bohModel.bohContribution,
       shift.area === "FOH" ? capitalize(shift.fohLevel) : "",
-      shift.area === "FOH" ? (shift.fohDuration === "over" ? "Over 7h" : "Under 7h") : capitalize(shift.bohDuration),
+      shift.area === "FOH" ? (shift.fohDuration === "over" ? "Over 7h" : "Under 7h") : capitalize(bohModel.bohShiftSize),
       Number.isFinite(shift.points) ? shift.points : calculateShiftPoints(shift),
     ]);
   });
