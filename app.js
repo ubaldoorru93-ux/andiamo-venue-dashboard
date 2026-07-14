@@ -1427,6 +1427,20 @@ function renderDailyTips(week, calc) {
   elements.dailyTipsReviewed.checked = week.dailyTipsReviewed === true;
 }
 
+function getStaffInitials(name) {
+  const words = cleanStaffName(name).split(" ").filter(Boolean);
+  return (words.length > 1 ? `${words[0][0]}${words[words.length - 1][0]}` : words[0]?.slice(0, 2) || "?").toUpperCase();
+}
+
+const staffActionIcons = {
+  save:
+    '<svg aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="m3 8 3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  toggle:
+    '<svg aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="M4 4v8M12 4v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  delete:
+    '<svg aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="M3 4h10M6 4V3h4v1M5 6v7h6V6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
 function renderStaff() {
   const activeStaff = state.staff.filter((person) => person.active !== false);
   const selectedStaffId = elements.shiftStaff.value;
@@ -1450,8 +1464,9 @@ function renderStaff() {
             const bohDefault = getStaffDefaultBohContribution(person);
             return `
             <div class="list-row staff-row ${person.active === false ? "muted-row" : ""}">
+              <div class="staff-avatar" aria-hidden="true">${escapeHtml(getStaffInitials(person.name))}</div>
               <div class="staff-editor">
-                <label>
+                <label class="staff-name-field">
                   Name
                   <input type="text" value="${escapeHtml(person.name)}" data-staff-name="${person.id}" aria-label="Staff name for ${escapeHtml(person.name)}" />
                 </label>
@@ -1490,11 +1505,11 @@ function renderStaff() {
                 <p class="validation-message staff-card-validation hidden" data-staff-validation="${person.id}" role="alert"></p>
               </div>
               <div class="staff-row-actions">
-                <button type="button" data-staff-save="${person.id}">Save</button>
-                <button type="button" data-staff-toggle="${person.id}">
-                  ${person.active === false ? "Reactivate" : "Deactivate"}
+                <button class="staff-save-button" type="button" data-staff-save="${person.id}" aria-label="Save ${escapeHtml(person.name)}" title="Save ${escapeHtml(person.name)}">${staffActionIcons.save}<span>Save</span></button>
+                <button class="staff-toggle-button" type="button" data-staff-toggle="${person.id}" aria-label="${person.active === false ? "Reactivate" : "Deactivate"} ${escapeHtml(person.name)}" title="${person.active === false ? "Reactivate" : "Deactivate"} ${escapeHtml(person.name)}">
+                  ${staffActionIcons.toggle}<span>${person.active === false ? "Reactivate" : "Deactivate"}</span>
                 </button>
-                <button class="staff-delete-button" type="button" data-staff-delete="${person.id}">Delete</button>
+                <button class="staff-delete-button" type="button" data-staff-delete="${person.id}" aria-label="Delete ${escapeHtml(person.name)}" title="Delete ${escapeHtml(person.name)}">${staffActionIcons.delete}<span>Delete</span></button>
               </div>
             </div>
           `;
@@ -2043,13 +2058,15 @@ elements.staffName.addEventListener("input", () => setStaffValidation());
 [elements.staffFoh, elements.staffBoh].forEach((field) => field.addEventListener("change", () => setStaffValidation()));
 
 elements.staffList.addEventListener("click", (event) => {
-  const saveId = event.target.dataset.staffSave;
-  const toggleId = event.target.dataset.staffToggle;
-  const deleteId = event.target.dataset.staffDelete;
+  const actionButton = event.target.closest("[data-staff-save], [data-staff-toggle], [data-staff-delete]");
+  if (!actionButton) return;
+  const saveId = actionButton.dataset.staffSave;
+  const toggleId = actionButton.dataset.staffToggle;
+  const deleteId = actionButton.dataset.staffDelete;
 
   if (saveId) {
     const person = state.staff.find((staff) => staff.id === saveId);
-    const row = event.target.closest(".staff-row");
+    const row = actionButton.closest(".staff-row");
     if (!person || !row) return;
     const nameInput = row.querySelector("[data-staff-name]");
     const areaInputs = Array.from(row.querySelectorAll("[data-staff-area]"));

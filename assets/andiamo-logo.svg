@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 112" role="img" aria-labelledby="title desc">
+  <title id="title">Andiamo Trattoria Chippendale</title>
+  <desc id="desc">Original Andiamo logo with terracotta A mark, muted-gold olive detail, and wordmark.</desc>
+  <defs>
+    <linearGradient id="mark" x1="8" y1="8" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c76a4d"/>
+      <stop offset="1" stop-color="#8e3535"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="12" width="76" height="76" rx="18" fill="url(#mark)"/>
+  <path d="M46 27 24 74h13l4-10h18l4 10h13L53 27h-7Zm-1 27 5-13 5 13H45Z" fill="#fffdf7"/>
+  <path d="M69 22c-12 0-19 7-21 18" fill="none" stroke="#c9a54f" stroke-width="3" stroke-linecap="round"/>
+  <path d="M65 25c7-1 11 1 14 5-6 2-11 1-14-5Zm-11 6c6-4 11-4 16-1-4 5-9 6-16 1Z" fill="#c9a54f" opacity=".95"/>
+  <text x="104" y="48" fill="#fffdf7" font-family="Georgia, 'Times New Roman', serif" font-size="30" font-weight="700" letter-spacing="5">ANDIAMO</text>
+  <text x="106" y="73" fill="#e3cf94" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="3">TRATTORIA · CHIPPENDALE</text>
+  <path d="M106 86h218" stroke="#c9a54f" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+</svg>
