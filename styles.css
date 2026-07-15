@@ -1240,14 +1240,20 @@ textarea {
 }
 
 #summary .daily-allocation-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
 #summary .daily-allocation-list {
-  max-height: 112px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
-  padding-right: 2px;
+  padding: 0 2px 6px 0;
+  scroll-padding-bottom: 6px;
 }
 
 #weekly .week-setup-form {
