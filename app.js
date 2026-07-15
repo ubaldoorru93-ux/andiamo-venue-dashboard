@@ -82,6 +82,7 @@ const elements = {
   summaryBohPool: document.querySelector("#summaryBohPool"),
   summaryPoints: document.querySelector("#summaryPoints"),
   staffSummaryBody: document.querySelector("#staffSummaryBody"),
+  staffSummaryMobile: document.querySelector("#staffSummaryMobile"),
   dailyAllocationList: document.querySelector("#dailyAllocationList"),
   shiftList: document.querySelector("#shiftList"),
   weeklyHistoryList: document.querySelector("#weeklyHistoryList"),
@@ -1599,7 +1600,7 @@ function renderBuilderDays() {
       const draft = override ? saved.draft : defaultDraft;
       const points = worked ? calculateShiftPoints(draft) : 0;
       return `
-        <article class="builder-day-row ${worked ? "selected" : ""}" data-builder-date="${day.date}">
+        <article class="builder-day-row ${worked ? "selected" : ""} ${override ? "override-enabled" : ""}" data-builder-date="${day.date}">
           <div class="builder-day-main">
             <label class="builder-worked">
               <input type="checkbox" data-builder-worked ${worked ? "checked" : ""} />
@@ -1673,6 +1674,7 @@ function updateBuilderDayRow(row) {
   const override = row.querySelector("[data-builder-override]")?.checked || false;
   const draft = getBuilderDayDraft(row);
   row.classList.toggle("selected", worked);
+  row.classList.toggle("override-enabled", override);
   row.querySelector(".builder-override-fields")?.classList.toggle("hidden", !override);
   row.querySelector(".builder-foh-override")?.classList.toggle("hidden", draft.area !== "FOH");
   row.querySelector(".builder-boh-override")?.classList.toggle("hidden", draft.area !== "BOH");
@@ -1703,6 +1705,35 @@ function renderSummary(calc) {
         )
         .join("")
     : `<tr><td colspan="5">Add shifts to calculate staff payouts.</td></tr>`;
+
+  elements.staffSummaryMobile.innerHTML = calc.staffRows.length
+    ? calc.staffRows
+        .map(
+          (row) => `
+            <article class="mobile-payout-card" aria-label="${escapeHtml(row.name)} final payout ${moneyFromCents(row.payoutCents)}">
+              <div class="mobile-payout-header">
+                <strong class="mobile-payout-name">${escapeHtml(row.name)}</strong>
+                <strong class="mobile-payout-value">${moneyFromCents(row.payoutCents)}</strong>
+              </div>
+              <div class="mobile-payout-metrics">
+                <div aria-label="FOH points ${row.fohPoints}">
+                  <span>FOH</span>
+                  <strong>${row.fohPoints}</strong>
+                </div>
+                <div aria-label="BOH points ${row.bohPoints}">
+                  <span>BOH</span>
+                  <strong>${row.bohPoints}</strong>
+                </div>
+                <div aria-label="Total points ${row.totalPoints}">
+                  <span>Total</span>
+                  <strong>${row.totalPoints}</strong>
+                </div>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : `<p class="empty-state">Add shifts to calculate staff payouts.</p>`;
 
   renderDailyAllocation(calc);
 }
@@ -1768,10 +1799,10 @@ function renderDailyAllocation(calc) {
             <span>${moneyFromCents(day.totalTipsCents)} total</span>
           </div>
           <div class="daily-allocation-metrics">
-            <span>Card/Tyro ${moneyFromCents(day.cardTipsCents)}</span>
-            <span>Cash ${moneyFromCents(day.cashTipsCents)}</span>
-            <span>FOH ${moneyFromCents(day.fohPoolCents)} / ${day.fohPoints} pts</span>
-            <span>BOH ${moneyFromCents(day.bohPoolCents)} / ${day.bohPoints} pts</span>
+            <span class="allocation-cash-metric">Card/Tyro ${moneyFromCents(day.cardTipsCents)}</span>
+            <span class="allocation-cash-metric">Cash ${moneyFromCents(day.cashTipsCents)}</span>
+            <span class="allocation-pool-metric">FOH ${moneyFromCents(day.fohPoolCents)} / ${day.fohPoints} pts</span>
+            <span class="allocation-pool-metric">BOH ${moneyFromCents(day.bohPoolCents)} / ${day.bohPoints} pts</span>
           </div>
           <p>${payoutText}</p>
           ${errorHtml}
@@ -1797,7 +1828,7 @@ function renderShifts() {
           }
           return `
             <article class="shift-row">
-              <div>
+              <div class="shift-row-detail">
                 <strong>${escapeHtml(getStaffName(shift.staffId))}</strong>
                 <span>${formatShiftDate(shift.date)} | ${shift.area} | ${detail}</span>
               </div>
@@ -1906,7 +1937,7 @@ function renderWeeklyHistory() {
           `;
         })
         .join("")
-    : `<p class="empty-state">No completed weeks yet.</p>`;
+    : `<div class="empty-state history-empty-state"><strong>No completed weeks yet.</strong><span>Finished weeks will appear here.</span></div>`;
 }
 
 function formatShiftDate(dateInput) {

@@ -43,13 +43,31 @@
             <span id="heroSplit">FOH 70% / BOH 30%</span>
           </div>
           <div class="hero-actions">
-            <button id="exportExcel" class="primary-button" type="button">Export Excel</button>
-            <button id="printSummary" class="primary-button" type="button">Print Summary</button>
-            <button id="backupData" class="primary-button" type="button">Backup Data</button>
-            <button id="restoreData" class="primary-button" type="button">Restore Data</button>
+            <button id="exportExcel" class="primary-button" type="button">
+              <svg class="button-icon" aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Export Excel</span>
+            </button>
+            <button id="printSummary" class="primary-button" type="button">
+              <svg class="button-icon" aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="M5 5V2h6v3M5 12H3V6h10v6h-2M5 10h6v4H5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Print Summary</span>
+            </button>
+            <button id="backupData" class="primary-button" type="button">
+              <svg class="button-icon" aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="M8 2v8m0 0 3-3m-3 3L5 7M3 13h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Backup Data</span>
+            </button>
+            <button id="restoreData" class="primary-button" type="button">
+              <svg class="button-icon" aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="M8 14V6m0 0 3 3M8 6 5 9M3 3h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Restore Data</span>
+            </button>
             <input id="restoreBackupFile" class="hidden" type="file" accept="application/json,.json" />
-            <button id="clearCurrentWeek" class="primary-button clear-week-button" type="button">Clear Current Week</button>
-            <button id="finishWeek" class="primary-button finish-button" type="button">Finish Week</button>
+            <button id="clearCurrentWeek" class="primary-button clear-week-button" type="button">
+              <svg class="button-icon" aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="M3 4h10M6 4V3h4v1M5 6v7h6V6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Clear Current Week</span>
+            </button>
+            <button id="finishWeek" class="primary-button finish-button" type="button">
+              <svg class="button-icon" aria-hidden="true" viewBox="0 0 16 16" focusable="false"><path d="m3 8 3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Finish Week</span>
+            </button>
           </div>
         </section>
 
@@ -328,6 +346,7 @@
               <tbody id="staffSummaryBody"></tbody>
             </table>
           </div>
+          <div id="staffSummaryMobile" class="staff-summary-mobile" tabindex="0" aria-label="Weekly staff payouts"></div>
 
           <div class="daily-allocation-section">
             <h4>Daily Allocation</h4>
