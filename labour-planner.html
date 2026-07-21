@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#163d31" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Andiamo Roster Decision Check</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="labour-planner.css?v=0.1.0" />
+  </head>
+  <body>
+    <div class="app-shell labour-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <img class="brand-logo" src="assets/andiamo-logo.svg" alt="Andiamo Trattoria Chippendale" />
+        </div>
+
+        <nav class="nav-list">
+          <a class="nav-item" href="operations-hub.html">Operations Hub 🔒</a>
+          <a class="nav-item active" href="labour-planner.html">Labour Check 🔒</a>
+          <a class="nav-item" href="index.html">Tip Calculator</a>
+          <a class="nav-item labour-only-link hidden" href="#forecast">Forecast</a>
+          <a class="nav-item labour-only-link hidden" href="#costs">Deputy Costs</a>
+          <a class="nav-item labour-only-link hidden" href="#decision">Decision Test</a>
+          <a class="nav-item labour-only-link hidden" href="#verdict">Thursday Verdict</a>
+        </nav>
+      </aside>
+
+      <main class="main-content labour-main">
+        <header class="topbar labour-topbar">
+          <div>
+            <p class="eyebrow">Labour Planner validation</p>
+            <h2>Roster Decision Check</h2>
+          </div>
+          <div id="accountPanel" class="account-panel hidden">
+            <span id="accountEmail"></span>
+            <button id="signOutButton" class="secondary-button" type="button">Sign out</button>
+          </div>
+        </header>
+
+        <section id="authGate" class="panel auth-card" aria-labelledby="loginHeading">
+          <div class="auth-lock" aria-hidden="true">🔒</div>
+          <div>
+            <p class="eyebrow">Private test area</p>
+            <h3 id="loginHeading">Sign in to test labour decisions</h3>
+            <p class="auth-explanation">Use the same secure email login as the Operations Hub.</p>
+          </div>
+
+          <form id="loginForm" class="login-form">
+            <label for="loginEmail">Email address</label>
+            <div class="login-row">
+              <input id="loginEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+              <button id="sendLoginLink" class="primary-action" type="submit">Send secure link</button>
+            </div>
+            <p id="authMessage" class="form-message" role="status" aria-live="polite"></p>
+          </form>
+
+          <div class="privacy-note">
+            <strong>Your labour test stays private</strong>
+            <span>Aggregate figures are stored in Supabase for authorised venue members. No named staff records or individual rate list are required.</span>
+          </div>
+        </section>
+
+        <div id="labourApp" class="labour-app hidden">
+          <section class="hero-band labour-hero" aria-label="Labour test status">
+            <div>
+              <p class="eyebrow">Thursday prototype</p>
+              <strong>Use beside Deputy—not instead of Deputy</strong>
+              <span>Enter the weekly totals once, then test the one roster decision you are unsure about.</span>
+            </div>
+            <div class="hero-status local-status">
+              <span>Storage</span>
+              <strong>Private</strong>
+            </div>
+          </section>
+
+          <section class="test-explainer" aria-label="How to test">
+            <strong>Three-minute test</strong>
+            <ol>
+              <li>Set the sales forecast.</li>
+              <li>Copy the FOH and BOH scheduled costs from Deputy.</li>
+              <li>Test one shift you might add or remove.</li>
+            </ol>
+          </section>
+
+          <section id="forecast" class="panel planner-panel forecast-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Step 1</p>
+                <h3>Build a sensible forecast</h3>
+              </div>
+              <span class="panel-hint">All sales ex GST</span>
+            </div>
+
+            <div class="input-grid forecast-grid">
+              <label>
+                Week starting Monday
+                <input id="weekStart" type="date" />
+              </label>
+              <label>
+                Last year sales
+                <span class="money-input"><span>$</span><input id="lastYearSales" type="number" min="0" step="100" inputmode="decimal" /></span>
+              </label>
+              <label>
+                Average of last 3 weeks
+                <span class="money-input"><span>$</span><input id="threeWeekSales" type="number" min="0" step="100" inputmode="decimal" /></span>
+              </label>
+              <label>
+                Your working forecast
+                <span class="money-input important-input"><span>$</span><input id="expectedSales" type="number" min="0" step="100" inputmode="decimal" /></span>
+              </label>
+            </div>
+
+            <div class="forecast-reference">
+              <div>
+                <span>Pierre-style budget</span>
+                <strong id="budgetSales">$0</strong>
+                <small>Last year + 5%</small>
+              </div>
+              <div class="reference-actions">
+                <button id="useBudget" class="secondary-button" type="button">Use budget as forecast</button>
+                <button id="useThreeWeek" class="secondary-button" type="button">Use 3-week average</button>
+              </div>
+            </div>
+
+            <label class="wide-label">
+              What could move this forecast?
+              <textarea id="forecastNotes" rows="2" maxlength="500" placeholder="Bookings, weather, local events, holidays, recent trade…"></textarea>
+            </label>
+          </section>
+
+          <section id="costs" class="panel planner-panel costs-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Step 2</p>
+                <h3>Correct Deputy's incomplete cost</h3>
+              </div>
+              <label class="target-label">
+                Target
+                <span><input id="targetPercent" type="number" min="1" max="100" step="0.1" inputmode="decimal" />%</span>
+              </label>
+            </div>
+
+            <div class="input-grid cost-grid">
+              <label>
+                Deputy scheduled FOH
+                <span class="money-input"><span>$</span><input id="deputyFohCost" type="number" min="0" step="10" inputmode="decimal" /></span>
+              </label>
+              <label>
+                Deputy scheduled BOH
+                <span class="money-input"><span>$</span><input id="deputyBohCost" type="number" min="0" step="10" inputmode="decimal" /></span>
+              </label>
+              <label>
+                Known weekly cost outside Deputy
+                <span class="money-input"><span>$</span><input id="outsideDeputyCost" type="number" min="0" step="10" inputmode="decimal" /></span>
+              </label>
+              <label>
+                Other operational wage cost
+                <span class="money-input"><span>$</span><input id="otherCost" type="number" min="0" step="10" inputmode="decimal" /></span>
+              </label>
+            </div>
+
+            <div class="metric-grid" aria-label="Weekly labour summary">
+              <article class="metric-card">
+                <span>Working forecast</span>
+                <strong id="metricSales">$0</strong>
+              </article>
+              <article class="metric-card">
+                <span>Corrected planned wages</span>
+                <strong id="metricWages">$0</strong>
+              </article>
+              <article id="wagePercentCard" class="metric-card">
+                <span>Operational wage %</span>
+                <strong id="metricPercent">0.0%</strong>
+              </article>
+              <article id="headroomCard" class="metric-card">
+                <span id="headroomLabel">Headroom to target</span>
+                <strong id="metricHeadroom">$0</strong>
+              </article>
+            </div>
+
+            <div class="scenario-table-wrap">
+              <table class="scenario-table">
+                <thead>
+                  <tr>
+                    <th>Sales outcome</th>
+                    <th>Sales</th>
+                    <th>Planned wages</th>
+                    <th>Wage %</th>
+                    <th>Against target</th>
+                  </tr>
+                </thead>
+                <tbody id="salesScenarioBody"></tbody>
+              </table>
+            </div>
+            <p class="calculation-note">Quiet and busy are private stress tests calculated in Supabase. They are not predictions.</p>
+          </section>
+
+          <section id="decision" class="panel planner-panel decision-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Step 3</p>
+                <h3>Test one add-or-cut decision</h3>
+              </div>
+              <span class="panel-hint">No staff names needed</span>
+            </div>
+
+            <div class="decision-grid">
+              <div class="decision-inputs">
+                <div class="input-grid compact-grid">
+                  <label>
+                    Day
+                    <select id="decisionDay">
+                      <option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option>
+                      <option>Friday</option><option>Saturday</option><option>Sunday</option>
+                    </select>
+                  </label>
+                  <label>
+                    Service
+                    <select id="service"><option value="dinner">Dinner</option><option value="lunch">Lunch</option></select>
+                  </label>
+                  <label>
+                    Coverage plan
+                    <select id="planMode"><option value="normal">Normal</option><option value="quiet">Quiet / strong team</option></select>
+                  </label>
+                  <label>
+                    Change
+                    <select id="changeDirection"><option value="remove">Remove hours</option><option value="add">Add hours</option></select>
+                  </label>
+                  <label>
+                    Hours changed
+                    <input id="changeHours" type="number" min="0" step="0.5" inputmode="decimal" />
+                  </label>
+                  <label>
+                    Approx. hourly cost
+                    <span class="money-input"><span>$</span><input id="hourlyCost" type="number" min="0" step="1" inputmode="decimal" /></span>
+                  </label>
+                  <label>
+                    FOH people after change
+                    <input id="fohCount" type="number" min="0" step="1" inputmode="numeric" />
+                  </label>
+                  <label>
+                    BOH people after change
+                    <input id="bohCount" type="number" min="0" step="1" inputmode="numeric" />
+                  </label>
+                </div>
+
+                <div class="coverage-checks">
+                  <label><input id="managerPresent" type="checkbox" /> Manager covered</label>
+                  <label><input id="allRounderManager" type="checkbox" /> Lunch manager can run every section</label>
+                  <label><input id="bartenderPresent" type="checkbox" /> Bartender covered</label>
+                  <label><input id="strongTeam" type="checkbox" /> Strong reduced FOH team confirmed</label>
+                  <label><input id="pizzaCovered" type="checkbox" /> Pizza covered</label>
+                  <label><input id="pastaCovered" type="checkbox" /> Pasta covered</label>
+                  <label><input id="larderCovered" type="checkbox" /> Larder covered</label>
+                  <label><input id="dishwasherCovered" type="checkbox" /> Dishwasher covered</label>
+                </div>
+              </div>
+
+              <aside class="decision-result">
+                <p class="eyebrow">Financial effect</p>
+                <div class="decision-number">
+                  <span>Weekly wage change</span>
+                  <strong id="shiftCostChange">$0</strong>
+                </div>
+                <div class="decision-number">
+                  <span>New weekly wage %</span>
+                  <strong id="projectedPercent">0.0%</strong>
+                </div>
+                <div class="decision-number">
+                  <span>Sales needed for target</span>
+                  <strong id="salesNeeded">$0</strong>
+                </div>
+                <div id="coverageResult" class="coverage-result" aria-live="polite"></div>
+              </aside>
+            </div>
+          </section>
+
+          <section id="verdict" class="panel planner-panel verdict-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Thursday verdict</p>
+                <h3>Did this improve a real roster decision?</h3>
+              </div>
+              <span id="savedVerdictLabel" class="panel-hint"></span>
+            </div>
+
+            <form id="verdictForm" class="verdict-form">
+              <div class="verdict-options">
+                <label><input type="radio" name="verdict" value="yes" /> Yes, it changed or confirmed my decision</label>
+                <label><input type="radio" name="verdict" value="uncertain" /> Maybe, but it needs less effort or better information</label>
+                <label><input type="radio" name="verdict" value="no" /> No, Deputy and my judgement were enough</label>
+              </div>
+              <label>
+                What happened?
+                <textarea id="verdictNotes" rows="3" maxlength="1000" placeholder="Which decision did you test? What helped—or got in the way?"></textarea>
+              </label>
+              <div class="verdict-actions">
+                <button id="clearTest" class="secondary-button danger-button" type="button">Delete this week's test</button>
+                <button class="primary-action" type="submit">Save Thursday verdict</button>
+              </div>
+              <p id="saveMessage" class="form-message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div id="labourToast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.7"></script>
+    <script src="labour-planner.js?v=0.1.0"></script>
+  </body>
+</html>
