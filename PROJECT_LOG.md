@@ -1,5 +1,54 @@
 # Project Log
 
+## 2026-07-21 - Operations Hub Secure Foundation
+
+### Project
+
+Added Stage 1 of the Restaurant Operations Hub as a private section of the existing Andiamo Dashboard. The first module is a Manager Improvement Inbox for capturing small operational improvements by text, phone photo, or voice recording and reviewing them later on another device.
+
+### Decisions
+
+- Keep the Tip Calculator and Operations Hub inside the same GitHub Pages dashboard.
+- Keep the Tip Calculator's existing local browser data and calculations unchanged.
+- Use Supabase only for the private cross-device Operations Hub.
+- Use passwordless email links instead of a separate password.
+- Design venue membership for future restaurant and assistant access rather than tying every record permanently to one person.
+- Store photos and original audio in a private bucket and store note metadata separately.
+- Require Row Level Security for every application table and private media access.
+- Use only the public Supabase browser key in the site; never place a database password, secret/service-role key, or transcription provider key in the repository.
+- Defer automatic transcription until it can run through a secure server-side function.
+- Validate whether phone capture becomes a real habit before adding maintenance, complaints, tasks, or other modules.
+
+### Changes Made
+
+- Added `operations-hub.html`, `operations-hub.css`, and `operations-hub.js`.
+- Added a private Operations Hub link to the Tip Calculator navigation.
+- Added passwordless email authentication and persistent cross-device sessions.
+- Added first-login venue and owner-membership setup.
+- Added written note, category, importance, phone photo, live voice recording, audio-file fallback, and editable transcript inputs.
+- Added private media uploads and private signed playback links.
+- Added an Improvement Inbox with All, Inbox, Action, and Done filters.
+- Added secure status updates and open-inbox counting.
+- Added responsive phone and laptop layouts.
+- Created Supabase tables for profiles, venues, venue memberships, improvement notes, and note attachments.
+- Created a private `operations-media` bucket with a 25 MB per-file limit.
+- Added table and storage Row Level Security policies.
+
+### Validation Completed
+
+- `node --check` passed for `operations-hub.js`, `app.js`, and `review-tool.js`.
+- HTML ID inspection found no duplicate IDs and no missing JavaScript element references.
+- `git diff --check` passed.
+- A simulated signed-out browser test passed for the login screen and magic-link request.
+- A simulated signed-in browser test passed for first venue setup, written-note saving, and inbox rendering.
+
+### Still Required
+
+- Complete a real magic-link sign-in on the published page.
+- Test real Supabase writes, private photo upload, microphone recording, mobile layout, and cross-device review.
+- Disable open new-user signup after Ubaldo's account has been created.
+- Add automatic transcription only after the basic capture workflow proves useful.
+
 ## 2026-07-03 - Finish Week and Weekly History
 
 ### Project

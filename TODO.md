@@ -23,6 +23,26 @@
 - [x] Build review response tool page.
 - [x] Add review response copy buttons.
 - [x] Add local review response history.
+- [x] Create the Supabase project for private cross-device tools.
+- [x] Add passwordless email authentication to the Operations Hub.
+- [x] Create secure venue, membership, improvement-note, and attachment tables.
+- [x] Add Row Level Security and a private media bucket.
+- [x] Build Operations Hub written-note, photo, and voice capture UI.
+- [x] Build Improvement Inbox filters and status workflow.
+
+## Operations Hub Validation
+
+- [x] Add the live Operations Hub page to Supabase's allowed redirect URLs.
+- [x] Publish the Stage 1 page to GitHub Pages.
+- [ ] Complete the first magic-link sign-in as Ubaldo.
+- [ ] Disable open new-user signups after Ubaldo's account exists.
+- [ ] Test a written note on desktop.
+- [ ] Test a phone photo with a caption on the Samsung Galaxy Z Fold 6.
+- [ ] Test a phone voice recording and playback.
+- [ ] Confirm all three records appear on the work or personal laptop.
+- [ ] Confirm a signed-out browser cannot access any note or private media.
+- [ ] Decide whether the real capture habit is useful before expanding the Hub.
+- [ ] Choose and add secure server-side automatic transcription if the capture test succeeds.
 
 ## Tip Distribution V1 Remaining
 

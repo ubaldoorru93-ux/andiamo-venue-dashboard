@@ -1,6 +1,27 @@
-# Andiamo Tip Distribution
+# Andiamo Venue Dashboard
 
-Private local browser app for Andiamo Trattoria Chippendale weekly tip distribution.
+Browser-based management tools for Andiamo Trattoria Chippendale.
+
+## Operations Hub - Stage 1
+
+Open `operations-hub.html` for the private Manager Improvement Inbox.
+
+- Passwordless email sign-in through Supabase Auth
+- Private multi-venue-ready database protected by Row Level Security
+- Quick written notes and captions
+- Phone camera photo capture and private photo storage
+- Phone microphone voice recording, audio-file fallback, playback, and private audio storage
+- Editable transcript field while secure automatic transcription remains a later stage
+- Categories and importance levels
+- Inbox, Action, and Done workflow
+- Cross-device access for authorised accounts
+- Original photos and recordings kept in a private storage bucket
+
+The Supabase publishable browser key is intentionally present in `operations-hub.js`. It does not provide privileged access. Never add a Supabase secret/service-role key, database password, or transcription provider key to this public repository.
+
+Automatic transcription is not connected in Stage 1. It requires a server-side function so the transcription service key remains private.
+
+## Tip Distribution Version 1
 
 ## Version 1
 
@@ -58,4 +79,4 @@ The app only reopens a completed week when the active week is empty: all daily C
 - Copy buttons
 - Local browser history log
 
-Open `index.html` for tip distribution or `review-tool.html` for review responses.
+Open `index.html` for tip distribution, `operations-hub.html` for the private Operations Hub, or `review-tool.html` for review responses.

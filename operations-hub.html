@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#163d31" />
+    <title>Andiamo Operations Hub</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="operations-hub.css" />
+  </head>
+  <body>
+    <div class="app-shell operations-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <img class="brand-logo" src="assets/andiamo-logo.svg" alt="Andiamo Trattoria Chippendale" />
+        </div>
+
+        <nav class="nav-list">
+          <a class="nav-item active" href="operations-hub.html">Operations Hub 🔒</a>
+          <a class="nav-item" href="index.html">Tip Calculator</a>
+          <a class="nav-item hub-only-link hidden" href="#capture">Capture</a>
+          <a class="nav-item hub-only-link hidden" href="#inbox">Improvement Inbox</a>
+        </nav>
+      </aside>
+
+      <main class="main-content operations-main">
+        <header class="topbar operations-topbar">
+          <div>
+            <p class="eyebrow">Manager improvement inbox</p>
+            <h2>Restaurant Operations Hub</h2>
+          </div>
+          <div id="accountPanel" class="account-panel hidden">
+            <span id="accountEmail"></span>
+            <button id="signOutButton" class="secondary-button" type="button">Sign out</button>
+          </div>
+        </header>
+
+        <section id="authGate" class="panel auth-card" aria-labelledby="loginHeading">
+          <div class="auth-lock" aria-hidden="true">🔒</div>
+          <div>
+            <p class="eyebrow">Private area</p>
+            <h3 id="loginHeading">Sign in to your Operations Hub</h3>
+            <p class="auth-explanation">
+              Enter your email and we will send you a secure login link. There is no password to remember.
+            </p>
+          </div>
+
+          <form id="loginForm" class="login-form">
+            <label for="loginEmail">Email address</label>
+            <div class="login-row">
+              <input id="loginEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+              <button id="sendLoginLink" class="primary-action" type="submit">Send secure link</button>
+            </div>
+            <p id="authMessage" class="form-message" role="status" aria-live="polite"></p>
+          </form>
+
+          <div class="privacy-note">
+            <strong>Your information stays private</strong>
+            <span>Only authorised accounts can read the venue's notes, photos and recordings.</span>
+          </div>
+        </section>
+
+        <div id="hubApp" class="hub-app hidden">
+          <section class="hero-band hub-hero" aria-label="Operations Hub status">
+            <div>
+              <p class="eyebrow">Signed in securely</p>
+              <strong id="venueName">Andiamo Trattoria Chippendale</strong>
+              <span>Capture quickly on your phone. Review properly when you have time.</span>
+            </div>
+            <div class="hero-status">
+              <span>Open inbox</span>
+              <strong id="openInboxCount">0</strong>
+            </div>
+          </section>
+
+          <section id="capture" class="capture-layout">
+            <article class="panel capture-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Capture now</p>
+                  <h3>What could be better?</h3>
+                </div>
+                <span class="save-time-label">About 20 seconds</span>
+              </div>
+
+              <form id="noteForm" class="capture-form">
+                <label>
+                  Short note or photo caption
+                  <textarea id="noteBody" rows="4" maxlength="2000" placeholder="Example: Move the spare glass rack closer to the bar before Friday..."></textarea>
+                </label>
+
+                <div class="capture-options">
+                  <label>
+                    Category
+                    <select id="noteCategory">
+                      <option value="">Choose later</option>
+                      <option value="Service">Service</option>
+                      <option value="Team">Team</option>
+                      <option value="Systems">Systems</option>
+                      <option value="Venue">Venue</option>
+                      <option value="Sales">Sales</option>
+                      <option value="Stock">Stock</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+                  <label>
+                    Importance
+                    <select id="notePriority">
+                      <option value="normal">Normal</option>
+                      <option value="high">Important</option>
+                      <option value="urgent">Urgent</option>
+                      <option value="low">Low</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="media-capture-grid">
+                  <section class="media-capture-card photo-capture-card">
+                    <div>
+                      <span class="media-icon" aria-hidden="true">📷</span>
+                      <strong>Add a photo</strong>
+                      <p>Take one now or choose an existing photo.</p>
+                    </div>
+                    <label class="secondary-button file-button" for="photoInput">Choose photo</label>
+                    <input id="photoInput" class="visually-hidden" type="file" accept="image/*" capture="environment" />
+                    <div id="photoPreviewWrap" class="media-preview hidden">
+                      <img id="photoPreview" alt="Selected note attachment" />
+                      <button id="removePhoto" class="text-button" type="button">Remove photo</button>
+                    </div>
+                  </section>
+
+                  <section class="media-capture-card voice-capture-card">
+                    <div>
+                      <span class="media-icon" aria-hidden="true">🎙️</span>
+                      <strong>Record a voice note</strong>
+                      <p id="voiceHelp">Tap start, speak, then tap stop.</p>
+                    </div>
+                    <div class="voice-buttons">
+                      <button id="startRecording" class="record-button" type="button">Start recording</button>
+                      <button id="stopRecording" class="secondary-button hidden" type="button">Stop</button>
+                    </div>
+                    <label class="audio-fallback" for="audioInput">Or choose an audio file</label>
+                    <input id="audioInput" class="visually-hidden" type="file" accept="audio/*" capture />
+                    <div id="audioPreviewWrap" class="media-preview hidden">
+                      <audio id="audioPreview" controls></audio>
+                      <button id="removeAudio" class="text-button" type="button">Remove recording</button>
+                    </div>
+                  </section>
+                </div>
+
+                <label id="transcriptField" class="transcript-field hidden">
+                  Transcript or extra detail
+                  <textarea id="noteTranscript" rows="3" maxlength="5000" placeholder="Automatic transcription will be connected securely in the next stage. You can add a few words here now if useful."></textarea>
+                  <span>The original recording will still be saved.</span>
+                </label>
+
+                <div class="capture-submit-row">
+                  <p id="captureMessage" class="form-message" role="status" aria-live="polite"></p>
+                  <button id="saveNoteButton" class="primary-action save-note-button" type="submit">Save to Improvement Inbox</button>
+                </div>
+              </form>
+            </article>
+
+            <aside class="panel capture-guide">
+              <p class="eyebrow">Keep it easy</p>
+              <h3>Capture first. Organise later.</h3>
+              <ol>
+                <li>Write, photograph or record what you noticed.</li>
+                <li>Save it without stopping to solve it.</li>
+                <li>Review the inbox later from your laptop.</li>
+              </ol>
+              <div class="guide-warning">
+                <strong>Avoid unnecessary personal details</strong>
+                <p>Use first names or roles only when a person genuinely needs to be identified.</p>
+              </div>
+            </aside>
+          </section>
+
+          <section id="inbox" class="panel inbox-panel">
+            <div class="panel-header inbox-heading">
+              <div>
+                <p class="eyebrow">Review later</p>
+                <h3>Improvement Inbox</h3>
+              </div>
+              <div id="statusFilters" class="status-filters" aria-label="Filter improvement notes">
+                <button class="filter-button active" type="button" data-status="all">All</button>
+                <button class="filter-button" type="button" data-status="inbox">Inbox</button>
+                <button class="filter-button" type="button" data-status="action">Action</button>
+                <button class="filter-button" type="button" data-status="done">Done</button>
+              </div>
+            </div>
+
+            <div id="inboxLoading" class="empty-inbox">Loading your private inbox…</div>
+            <div id="inboxList" class="inbox-list" aria-live="polite"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div id="hubToast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.7"></script>
+    <script src="operations-hub.js?v=1.0.0"></script>
+  </body>
+</html>
