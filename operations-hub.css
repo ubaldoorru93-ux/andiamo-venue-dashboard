@@ -2,6 +2,10 @@
   align-content: start;
 }
 
+.operations-shell .hidden {
+  display: none !important;
+}
+
 .operations-topbar,
 .auth-card,
 .hub-app {

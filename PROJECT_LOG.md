@@ -49,6 +49,11 @@ Added Stage 1 of the Restaurant Operations Hub as a private section of the exist
 - Disable open new-user signup after Ubaldo's account has been created.
 - Add automatic transcription only after the basic capture workflow proves useful.
 
+### First Live Display Fix
+
+- Fixed a CSS priority conflict that showed the signed-out login card and empty photo/audio previews even after a successful sign-in.
+- Added a stylesheet cache-busting version so browsers receive the corrected visibility rule immediately.
+
 ## 2026-07-03 - Finish Week and Weekly History
 
 ### Project
