@@ -528,16 +528,24 @@
 
 .verdict-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 10px;
 }
 
 .verdict-options label {
-  min-height: 58px;
+  min-width: 0;
+  min-height: 64px;
+  height: 100%;
   border: 1px solid rgba(215, 203, 184, 0.84);
   border-radius: 7px;
   background: rgba(255, 253, 247, 0.72);
-  padding: 9px;
+  padding: 12px;
+}
+
+.verdict-options input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
 }
 
 .verdict-actions {
