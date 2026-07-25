@@ -9,7 +9,7 @@ const hubState = {
   user: null,
   venue: null,
   notes: [],
-  filter: "all",
+  filter: "open",
   photoFile: null,
   photoUrl: "",
   audioFile: null,
@@ -17,6 +17,11 @@ const hubState = {
   mediaRecorder: null,
   mediaStream: null,
   recordingChunks: [],
+  speechRecognition: null,
+  speechRecognitionRunning: false,
+  reviewQueue: [],
+  reviewIndex: 0,
+  reviewDue: "",
   loadingSession: false
 };
 
@@ -93,9 +98,23 @@ function cacheElements() {
     "noteTranscript",
     "captureMessage",
     "saveNoteButton",
+    "startRapidReview",
     "statusFilters",
     "inboxLoading",
     "inboxList",
+    "rapidReviewOverlay",
+    "closeRapidReview",
+    "finishRapidReview",
+    "rapidReviewProgress",
+    "rapidReviewEmpty",
+    "rapidReviewCard",
+    "reviewActionTitle",
+    "reviewTranscriptWrap",
+    "reviewTranscript",
+    "reviewBodyWrap",
+    "reviewBody",
+    "reviewMedia",
+    "rapidReviewMessage",
     "hubToast"
   ].forEach(function (id) {
     elements[id] = document.getElementById(id);
@@ -114,8 +133,22 @@ function bindEvents() {
   elements.stopRecording.addEventListener("click", stopVoiceRecording);
   elements.audioInput.addEventListener("change", selectAudioFile);
   elements.removeAudio.addEventListener("click", clearAudio);
+  elements.startRapidReview.addEventListener("click", startRapidReview);
   elements.statusFilters.addEventListener("click", changeInboxFilter);
   elements.inboxList.addEventListener("click", handleInboxAction);
+  elements.closeRapidReview.addEventListener("click", closeRapidReview);
+  elements.finishRapidReview.addEventListener("click", closeRapidReview);
+  elements.rapidReviewOverlay.addEventListener("click", function (event) {
+    if (event.target === elements.rapidReviewOverlay) {
+      closeRapidReview();
+    }
+  });
+  elements.rapidReviewOverlay.addEventListener("click", handleRapidReviewClick);
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !elements.rapidReviewOverlay.classList.contains("hidden")) {
+      closeRapidReview();
+    }
+  });
   window.addEventListener("beforeunload", stopActiveMediaStream);
 }
 
@@ -149,6 +182,8 @@ async function handleSession(session) {
 }
 
 function showSignedOutView() {
+  stopBrowserTranscription();
+  closeRapidReview();
   hubState.user = null;
   hubState.venue = null;
   hubState.notes = [];
@@ -355,6 +390,7 @@ async function startVoiceRecording() {
 
     hubState.mediaRecorder.addEventListener("stop", finishVoiceRecording);
     hubState.mediaRecorder.start();
+    startBrowserTranscription();
 
     elements.startRecording.disabled = true;
     elements.startRecording.classList.add("recording");
@@ -376,6 +412,8 @@ function stopVoiceRecording() {
 }
 
 function finishVoiceRecording() {
+  stopBrowserTranscription();
+
   const mimeType =
     (hubState.mediaRecorder && hubState.mediaRecorder.mimeType) ||
     (hubState.recordingChunks[0] && hubState.recordingChunks[0].type) ||
@@ -446,6 +484,8 @@ function showAudioPreview(file) {
 }
 
 function clearAudio() {
+  stopBrowserTranscription();
+
   if (hubState.mediaRecorder && hubState.mediaRecorder.state !== "inactive") {
     hubState.mediaRecorder.stop();
   }
@@ -464,6 +504,75 @@ function clearAudio() {
   elements.stopRecording.disabled = false;
   elements.stopRecording.classList.add("hidden");
   elements.voiceHelp.textContent = "Tap start, speak, then tap stop.";
+}
+
+function startBrowserTranscription() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!Recognition) {
+    return;
+  }
+
+  const recognition = new Recognition();
+  const existingTranscript = elements.noteTranscript.value.trim();
+  let finalTranscript = existingTranscript;
+
+  recognition.lang = "en-AU";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.addEventListener("result", function (event) {
+    let interimTranscript = "";
+
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const text = event.results[index][0].transcript.trim();
+
+      if (event.results[index].isFinal) {
+        finalTranscript = joinTranscript(finalTranscript, text);
+      } else {
+        interimTranscript = joinTranscript(interimTranscript, text);
+      }
+    }
+
+    elements.noteTranscript.value = joinTranscript(finalTranscript, interimTranscript);
+    elements.transcriptField.classList.remove("hidden");
+    elements.voiceHelp.textContent = "Recording and creating a draft title. Tap stop when finished.";
+  });
+
+  recognition.addEventListener("error", function () {
+    hubState.speechRecognitionRunning = false;
+    elements.voiceHelp.textContent = "Recording continues. Automatic wording is unavailable on this browser.";
+  });
+
+  recognition.addEventListener("end", function () {
+    hubState.speechRecognitionRunning = false;
+  });
+
+  try {
+    recognition.start();
+    hubState.speechRecognition = recognition;
+    hubState.speechRecognitionRunning = true;
+  } catch (_error) {
+    hubState.speechRecognition = null;
+    hubState.speechRecognitionRunning = false;
+  }
+}
+
+function stopBrowserTranscription() {
+  if (hubState.speechRecognition && hubState.speechRecognitionRunning) {
+    try {
+      hubState.speechRecognition.stop();
+    } catch (_error) {
+      // The recording remains the reliable fallback if browser speech recognition stops early.
+    }
+  }
+
+  hubState.speechRecognition = null;
+  hubState.speechRecognitionRunning = false;
+}
+
+function joinTranscript(first, second) {
+  return [first, second].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
 function clearAudioPreviewUrl() {
@@ -649,7 +758,9 @@ async function addSignedMediaUrls(notes) {
 
 function renderInbox() {
   const visibleNotes = hubState.notes.filter(function (note) {
-    return hubState.filter === "all" || note.status === hubState.filter;
+    return hubState.filter === "open"
+      ? note.status !== "done"
+      : note.status === hubState.filter;
   });
 
   elements.inboxLoading.classList.add("hidden");
@@ -664,7 +775,58 @@ function renderInbox() {
     return;
   }
 
-  elements.inboxList.innerHTML = visibleNotes.map(noteCardHtml).join("");
+  elements.inboxList.innerHTML = groupedNotesHtml(visibleNotes);
+}
+
+function groupedNotesHtml(notes) {
+  if (hubState.filter !== "open" && hubState.filter !== "action") {
+    return notes.map(noteCardHtml).join("");
+  }
+
+  const inboxNotes = notes.filter(function (note) {
+    return note.status !== "action";
+  });
+  const actionNotes = notes.filter(function (note) {
+    return note.status === "action";
+  });
+  const mine = actionNotes.filter(function (note) {
+    return parseActionData(note.next_action).owner === "me";
+  });
+  const assistant = actionNotes.filter(function (note) {
+    return parseActionData(note.next_action).owner === "assistant";
+  });
+  const unassigned = actionNotes.filter(function (note) {
+    return !parseActionData(note.next_action).owner;
+  });
+  const sections = [];
+
+  if (hubState.filter === "open" && inboxNotes.length) {
+    sections.push(noteGroupHtml("Inbox", inboxNotes));
+  }
+
+  if (mine.length) {
+    sections.push(noteGroupHtml("Mine", mine));
+  }
+
+  if (assistant.length) {
+    sections.push(noteGroupHtml("Assistant’s", assistant));
+  }
+
+  if (unassigned.length) {
+    sections.push(noteGroupHtml("Unassigned", unassigned));
+  }
+
+  return sections.join("");
+}
+
+function noteGroupHtml(label, notes) {
+  return (
+    '<section class="note-group">' +
+      '<h4 class="note-group-heading">' + escapeHtml(label) +
+      '<span>' + notes.length + "</span></h4>" +
+      '<div class="note-group-list">' + notes.map(noteCardHtml).join("") + "</div>" +
+    "</section>"
+  );
 }
 
 function noteCardHtml(note) {
@@ -679,8 +841,9 @@ function noteCardHtml(note) {
     : "";
   const category = note.category
     ? "<span>" + escapeHtml(note.category) + "</span>"
-    : "<span>Unsorted</span>";
+    : "";
   const media = mediaHtml(note.note_attachments || []);
+  const action = actionSummaryHtml(note);
 
   return (
     '<article class="inbox-card priority-' +
@@ -695,7 +858,9 @@ function noteCardHtml(note) {
           "<h4>" + title + "</h4>" +
           '<div class="note-meta">' +
             category +
-            "<span>" + escapeHtml(priorityLabel(note.priority)) + "</span>" +
+            (note.priority !== "normal"
+              ? "<span>" + escapeHtml(priorityLabel(note.priority)) + "</span>"
+              : "") +
             "<span>" + escapeHtml(formatDateTime(note.occurred_at)) + "</span>" +
           "</div>" +
         "</div>" +
@@ -703,6 +868,7 @@ function noteCardHtml(note) {
       "</div>" +
       body +
       transcript +
+      action +
       media +
       '<div class="note-actions" aria-label="Change note status">' +
         statusButtonHtml(note, "inbox", "Keep in Inbox") +
@@ -745,6 +911,56 @@ function mediaHtml(attachments) {
   return '<div class="note-media-list">' + items.join("") + "</div>";
 }
 
+function actionSummaryHtml(note) {
+  if (note.status !== "action") {
+    return "";
+  }
+
+  const actionData = parseActionData(note.next_action);
+  const ownerLabel = actionData.owner === "assistant"
+    ? "Assistant"
+    : actionData.owner === "me"
+      ? "Me"
+      : "Unassigned";
+  const actionTitle = actionData.action || note.title || "Follow up";
+  const dueLabel = note.due_date ? " · " + formatDueDate(note.due_date) : "";
+
+  return (
+    '<div class="action-summary">' +
+      "<span>" + escapeHtml(ownerLabel + dueLabel) + "</span>" +
+      "<strong>" + escapeHtml(actionTitle) + "</strong>" +
+    "</div>"
+  );
+}
+
+function parseActionData(value) {
+  if (!value) {
+    return { action: "", owner: "" };
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (parsed && typeof parsed === "object") {
+      return {
+        action: typeof parsed.action === "string" ? parsed.action : "",
+        owner: parsed.owner === "me" || parsed.owner === "assistant" ? parsed.owner : ""
+      };
+    }
+  } catch (_error) {
+    // Older plain-text next actions remain fully supported.
+  }
+
+  return { action: String(value), owner: "" };
+}
+
+function serialiseActionData(action, owner) {
+  return JSON.stringify({
+    action: action || "Follow up",
+    owner: owner === "assistant" ? "assistant" : "me"
+  });
+}
+
 function statusButtonHtml(note, status, label) {
   return (
     '<button class="status-button' +
@@ -784,11 +1000,20 @@ async function handleInboxAction(event) {
 
   const noteId = button.dataset.noteId;
   const newStatus = button.dataset.statusAction;
+  const note = hubState.notes.find(function (item) {
+    return item.id === noteId;
+  });
+  const update = { status: newStatus };
+
+  if (newStatus === "action" && note && !note.next_action) {
+    update.next_action = serialiseActionData(note.title || "Follow up", "me");
+  }
+
   setButtonBusy(button, true, "Saving…");
 
   const result = await supabaseClient
     .from("improvement_notes")
-    .update({ status: newStatus })
+    .update(update)
     .eq("id", noteId);
 
   setButtonBusy(button, false);
@@ -798,12 +1023,8 @@ async function handleInboxAction(event) {
     return;
   }
 
-  const note = hubState.notes.find(function (item) {
-    return item.id === noteId;
-  });
-
   if (note) {
-    note.status = newStatus;
+    Object.assign(note, update);
   }
 
   updateInboxCount();
@@ -815,8 +1036,195 @@ function updateInboxCount() {
   const openCount = hubState.notes.filter(function (note) {
     return note.status !== "done" && note.status !== "archived";
   }).length;
+  const reviewCount = hubState.notes.filter(function (note) {
+    return note.status === "inbox";
+  }).length;
 
   elements.openInboxCount.textContent = String(openCount);
+  elements.startRapidReview.disabled = reviewCount === 0;
+  elements.startRapidReview.textContent = reviewCount
+    ? "Review Inbox (" + reviewCount + ")"
+    : "Inbox reviewed";
+}
+
+function startRapidReview() {
+  hubState.reviewQueue = hubState.notes
+    .filter(function (note) {
+      return note.status === "inbox";
+    })
+    .slice()
+    .reverse();
+  hubState.reviewIndex = 0;
+  hubState.reviewDue = "";
+  elements.rapidReviewOverlay.classList.remove("hidden");
+  document.body.classList.add("review-open");
+  renderRapidReview();
+}
+
+function closeRapidReview() {
+  if (!elements.rapidReviewOverlay) {
+    return;
+  }
+
+  elements.rapidReviewOverlay.classList.add("hidden");
+  document.body.classList.remove("review-open");
+  hubState.reviewQueue = [];
+  hubState.reviewIndex = 0;
+  hubState.reviewDue = "";
+  setMessage(elements.rapidReviewMessage, "");
+}
+
+function renderRapidReview() {
+  const note = currentReviewNote();
+  const total = hubState.reviewQueue.length;
+
+  if (!note) {
+    elements.rapidReviewProgress.textContent = total ? total + " reviewed" : "";
+    elements.rapidReviewCard.classList.add("hidden");
+    elements.rapidReviewEmpty.classList.remove("hidden");
+    return;
+  }
+
+  const actionData = parseActionData(note.next_action);
+  elements.rapidReviewProgress.textContent =
+    "Note " + (hubState.reviewIndex + 1) + " of " + total;
+  elements.rapidReviewEmpty.classList.add("hidden");
+  elements.rapidReviewCard.classList.remove("hidden");
+  elements.reviewActionTitle.value =
+    actionData.action || draftActionTitle(note);
+  elements.reviewTranscript.textContent = note.transcript || "";
+  elements.reviewTranscriptWrap.classList.toggle("hidden", !note.transcript);
+  elements.reviewBody.textContent = note.body || "";
+  elements.reviewBodyWrap.classList.toggle("hidden", !note.body);
+  elements.reviewMedia.innerHTML = mediaHtml(note.note_attachments || []);
+  setReviewDue("");
+  setMessage(elements.rapidReviewMessage, "");
+  window.setTimeout(function () {
+    elements.reviewActionTitle.focus();
+    elements.reviewActionTitle.select();
+  }, 0);
+}
+
+function currentReviewNote() {
+  return hubState.reviewQueue[hubState.reviewIndex] || null;
+}
+
+function handleRapidReviewClick(event) {
+  const dueButton = event.target.closest("[data-review-due]");
+
+  if (dueButton) {
+    setReviewDue(dueButton.dataset.reviewDue || "");
+    return;
+  }
+
+  const decisionButton = event.target.closest("[data-review-decision]");
+
+  if (decisionButton) {
+    saveRapidReviewDecision(decisionButton.dataset.reviewDecision);
+  }
+}
+
+function setReviewDue(value) {
+  hubState.reviewDue = value;
+  elements.rapidReviewOverlay.querySelectorAll("[data-review-due]").forEach(function (button) {
+    button.classList.toggle("active", (button.dataset.reviewDue || "") === value);
+  });
+}
+
+async function saveRapidReviewDecision(decision) {
+  const note = currentReviewNote();
+
+  if (!note) {
+    return;
+  }
+
+  const actionTitle =
+    elements.reviewActionTitle.value.trim() || draftActionTitle(note) || "Follow up";
+  const update = { title: actionTitle };
+
+  if (decision === "me" || decision === "assistant") {
+    update.status = "action";
+    update.next_action = serialiseActionData(actionTitle, decision);
+    update.due_date = resolveReviewDueDate(hubState.reviewDue);
+  } else if (decision === "done") {
+    update.status = "done";
+  } else {
+    update.status = "inbox";
+  }
+
+  setRapidReviewBusy(true);
+  setMessage(elements.rapidReviewMessage, "Saving…");
+
+  const result = await supabaseClient
+    .from("improvement_notes")
+    .update(update)
+    .eq("id", note.id);
+
+  setRapidReviewBusy(false);
+
+  if (result.error) {
+    setMessage(elements.rapidReviewMessage, friendlyError(result.error), "error");
+    return;
+  }
+
+  Object.assign(note, update);
+  const stateNote = hubState.notes.find(function (item) {
+    return item.id === note.id;
+  });
+
+  if (stateNote) {
+    Object.assign(stateNote, update);
+  }
+
+  hubState.reviewIndex += 1;
+  updateInboxCount();
+  renderInbox();
+  renderRapidReview();
+}
+
+function setRapidReviewBusy(busy) {
+  elements.rapidReviewOverlay
+    .querySelectorAll("[data-review-decision], [data-review-due], #reviewActionTitle")
+    .forEach(function (control) {
+      control.disabled = busy;
+    });
+}
+
+function draftActionTitle(note) {
+  const genericTitles = ["Voice note", "Photo note", "Voice and photo note", "Improvement note"];
+  const source =
+    (genericTitles.includes(note.title) ? "" : note.title) ||
+    note.transcript ||
+    note.body ||
+    note.title ||
+    "Follow up";
+  const firstThought = source.split(/[.!?\n]/)[0].trim();
+
+  return firstThought.length > 90
+    ? firstThought.slice(0, 87).trim() + "…"
+    : firstThought;
+}
+
+function resolveReviewDueDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const due = new Date();
+  due.setHours(12, 0, 0, 0);
+
+  if (value === "tomorrow") {
+    due.setDate(due.getDate() + 1);
+  } else if (value === "week") {
+    const daysUntilSunday = (7 - due.getDay()) % 7;
+    due.setDate(due.getDate() + daysUntilSunday);
+  }
+
+  return [
+    due.getFullYear(),
+    String(due.getMonth() + 1).padStart(2, "0"),
+    String(due.getDate()).padStart(2, "0")
+  ].join("-");
 }
 
 function determineCaptureType(hasText, hasPhoto, hasAudio) {
@@ -933,6 +1341,19 @@ function formatDateTime(value) {
     hour: "numeric",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatDueDate(value) {
+  const parts = String(value).split("-").map(Number);
+
+  if (parts.length !== 3 || parts.some(Number.isNaN)) {
+    return value;
+  }
+
+  return "Due " + new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short"
+  }).format(new Date(parts[0], parts[1] - 1, parts[2], 12));
 }
 
 function showAuthMessage(message, type) {

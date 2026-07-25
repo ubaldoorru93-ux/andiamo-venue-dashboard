@@ -11,7 +11,11 @@ Open `operations-hub.html` for the private Manager Improvement Inbox.
 - Quick written notes and captions
 - Phone camera photo capture and private photo storage
 - Phone microphone voice recording, audio-file fallback, playback, and private audio storage
-- Editable transcript field while secure automatic transcription remains a later stage
+- Optional browser live transcription while recording, with the original audio kept as the reliable fallback
+- Automatic draft titles from recognised speech when the browser supports it
+- One-tap Review Inbox flow for assigning an action to Me or Assistant, choosing an optional deadline, closing it, or keeping it in the inbox
+- Open items shown by default, Done items available through their own filter
+- Action items grouped into Mine, Assistant's, and Unassigned
 - Categories and importance levels
 - Inbox, Action, and Done workflow
 - Cross-device access for authorised accounts
@@ -19,7 +23,7 @@ Open `operations-hub.html` for the private Manager Improvement Inbox.
 
 The Supabase publishable browser key is intentionally present in `operations-hub.js`. It does not provide privileged access. Never add a Supabase secret/service-role key, database password, or transcription provider key to this public repository.
 
-Automatic transcription is not connected in Stage 1. It requires a server-side function so the transcription service key remains private.
+Browser speech recognition is an optional convenience and is not supported consistently by every browser. Saving the recording does not depend on transcription. No paid transcription API or secret key is used.
 
 ## Tip Distribution Version 1
 
