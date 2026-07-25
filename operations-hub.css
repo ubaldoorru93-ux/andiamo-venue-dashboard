@@ -603,6 +603,10 @@ body.review-open {
   padding: 18px;
 }
 
+.review-overlay.hidden {
+  display: none;
+}
+
 .review-dialog {
   width: min(680px, 100%);
   max-height: calc(100vh - 36px);
