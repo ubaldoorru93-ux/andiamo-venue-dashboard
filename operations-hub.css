@@ -516,6 +516,32 @@
   white-space: pre-wrap;
 }
 
+.note-utility-actions,
+.brief-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.note-utility-button,
+.brief-item-actions button {
+  border: 1px solid rgba(31, 95, 72, 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--green-deep);
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.note-utility-button.active {
+  border-color: rgba(183, 138, 58, 0.5);
+  background: rgba(243, 223, 172, 0.25);
+  color: var(--ochre-600);
+}
+
 .transcript-copy {
   border-left: 3px solid rgba(183, 138, 58, 0.48);
   background: rgba(243, 223, 172, 0.18);
@@ -715,6 +741,15 @@ button:disabled {
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
+}
+
+.brief-item-actions {
+  margin-top: 2px;
+}
+
+.brief-item-actions button {
+  padding: 3px 7px;
+  font-size: 9px;
 }
 
 .brief-empty {
