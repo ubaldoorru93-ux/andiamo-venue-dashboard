@@ -22,6 +22,7 @@ const hubState = {
   reviewQueue: [],
   reviewIndex: 0,
   reviewDue: "",
+  briefWeekStart: startOfWeek(new Date()),
   loadingSession: false
 };
 
@@ -102,6 +103,21 @@ function cacheElements() {
     "statusFilters",
     "inboxLoading",
     "inboxList",
+    "weeklyBriefRange",
+    "previousBriefWeek",
+    "currentBriefWeek",
+    "nextBriefWeek",
+    "weeklyBriefSummary",
+    "briefOutstandingCount",
+    "briefOutstandingList",
+    "briefCompletedCount",
+    "briefCompletedList",
+    "briefFollowUpCount",
+    "briefFollowUpList",
+    "handoverDraft",
+    "copyHandover",
+    "pulseDraft",
+    "copyPulseDraft",
     "rapidReviewOverlay",
     "closeRapidReview",
     "finishRapidReview",
@@ -136,6 +152,22 @@ function bindEvents() {
   elements.startRapidReview.addEventListener("click", startRapidReview);
   elements.statusFilters.addEventListener("click", changeInboxFilter);
   elements.inboxList.addEventListener("click", handleInboxAction);
+  elements.previousBriefWeek.addEventListener("click", function () {
+    changeBriefWeek(-7);
+  });
+  elements.currentBriefWeek.addEventListener("click", function () {
+    hubState.briefWeekStart = startOfWeek(new Date());
+    renderWeeklyBrief();
+  });
+  elements.nextBriefWeek.addEventListener("click", function () {
+    changeBriefWeek(7);
+  });
+  elements.copyHandover.addEventListener("click", function () {
+    copyBriefText(elements.handoverDraft, "Handover copied");
+  });
+  elements.copyPulseDraft.addEventListener("click", function () {
+    copyBriefText(elements.pulseDraft, "Pulse notes copied");
+  });
   elements.closeRapidReview.addEventListener("click", closeRapidReview);
   elements.finishRapidReview.addEventListener("click", closeRapidReview);
   elements.rapidReviewOverlay.addEventListener("click", function (event) {
@@ -734,6 +766,7 @@ async function loadInbox() {
   hubState.notes = await addSignedMediaUrls(result.data || []);
   updateInboxCount();
   renderInbox();
+  renderWeeklyBrief();
 }
 
 async function addSignedMediaUrls(notes) {
@@ -962,16 +995,16 @@ function serialiseActionData(action, owner) {
 }
 
 function statusButtonHtml(note, status, label) {
+  if (note.status === status) {
+    return "";
+  }
+
   return (
-    '<button class="status-button' +
-    (note.status === status ? " active" : "") +
-    '" type="button" data-status-action="' +
+    '<button class="status-button" type="button" data-status-action="' +
     status +
     '" data-note-id="' +
     escapeHtml(note.id) +
-    '"' +
-    (note.status === status ? " disabled" : "") +
-    ">" +
+    '">' +
     label +
     "</button>"
   );
@@ -1024,11 +1057,12 @@ async function handleInboxAction(event) {
   }
 
   if (note) {
-    Object.assign(note, update);
+    Object.assign(note, update, { updated_at: new Date().toISOString() });
   }
 
   updateInboxCount();
   renderInbox();
+  renderWeeklyBrief();
   showToast("Note moved to " + statusLabel(newStatus));
 }
 
@@ -1173,13 +1207,231 @@ async function saveRapidReviewDecision(decision) {
   });
 
   if (stateNote) {
-    Object.assign(stateNote, update);
+    Object.assign(stateNote, update, { updated_at: new Date().toISOString() });
   }
 
   hubState.reviewIndex += 1;
   updateInboxCount();
   renderInbox();
+  renderWeeklyBrief();
   renderRapidReview();
+}
+
+function changeBriefWeek(days) {
+  const nextWeek = new Date(hubState.briefWeekStart);
+  nextWeek.setDate(nextWeek.getDate() + days);
+  hubState.briefWeekStart = startOfWeek(nextWeek);
+  renderWeeklyBrief();
+}
+
+function renderWeeklyBrief() {
+  if (!elements.weeklyBriefSummary) {
+    return;
+  }
+
+  const brief = buildWeeklyBrief(hubState.notes, hubState.briefWeekStart);
+  elements.weeklyBriefRange.textContent =
+    formatBriefDay(brief.weekStart) + " – " + formatBriefDay(brief.weekEnd);
+  elements.briefOutstandingCount.textContent = String(brief.outstanding.length);
+  elements.briefCompletedCount.textContent = String(brief.completed.length);
+  elements.briefFollowUpCount.textContent = String(brief.followUp.length);
+  elements.briefOutstandingList.innerHTML = briefListHtml(brief.outstanding, "Nothing outstanding.");
+  elements.briefCompletedList.innerHTML = briefListHtml(brief.completed, "Nothing completed in this week.");
+  elements.briefFollowUpList.innerHTML = briefListHtml(brief.followUp, "No follow-up flags.");
+  elements.weeklyBriefSummary.innerHTML =
+    briefMetricHtml("Outstanding", brief.outstanding.length) +
+    briefMetricHtml("Mine", brief.mine.length) +
+    briefMetricHtml("Assistant", brief.assistant.length) +
+    briefMetricHtml("Completed", brief.completed.length) +
+    briefMetricHtml("Overdue", brief.overdue.length);
+  elements.handoverDraft.value = buildHandoverDraft(brief);
+  elements.pulseDraft.value = buildPulseDraft(brief);
+}
+
+function buildWeeklyBrief(notes, weekStartValue) {
+  const weekStart = startOfDay(weekStartValue);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  const today = startOfDay(new Date());
+  const soon = new Date(today);
+  soon.setDate(soon.getDate() + 2);
+
+  const outstanding = notes.filter(function (note) {
+    return note.status !== "done" && note.status !== "archived";
+  });
+  const completed = notes.filter(function (note) {
+    const completedAt = new Date(note.updated_at || note.created_at);
+    return note.status === "done" && completedAt >= weekStart && completedAt <= weekEnd;
+  });
+  const mine = outstanding.filter(function (note) {
+    return note.status === "action" && parseActionData(note.next_action).owner === "me";
+  });
+  const assistant = outstanding.filter(function (note) {
+    return note.status === "action" && parseActionData(note.next_action).owner === "assistant";
+  });
+  const overdue = outstanding.filter(function (note) {
+    return note.due_date && dateFromIsoDay(note.due_date) < today;
+  });
+  const followUp = outstanding.filter(function (note) {
+    const due = note.due_date ? dateFromIsoDay(note.due_date) : null;
+    return (
+      overdue.includes(note) ||
+      (due && due <= soon) ||
+      note.priority === "urgent" ||
+      note.priority === "high"
+    );
+  });
+
+  return {
+    weekStart: weekStart,
+    weekEnd: weekEnd,
+    outstanding: outstanding,
+    completed: completed,
+    mine: mine,
+    assistant: assistant,
+    overdue: overdue,
+    followUp: followUp
+  };
+}
+
+function briefMetricHtml(label, value) {
+  return (
+    '<div class="brief-metric"><span>' + escapeHtml(label) + "</span><strong>" +
+    escapeHtml(value) + "</strong></div>"
+  );
+}
+
+function briefListHtml(notes, emptyMessage) {
+  if (!notes.length) {
+    return '<p class="brief-empty">' + escapeHtml(emptyMessage) + "</p>";
+  }
+
+  return notes.map(function (note) {
+    const action = parseActionData(note.next_action);
+    const owner = action.owner === "assistant" ? "Assistant" : action.owner === "me" ? "Me" : "";
+    const due = note.due_date ? formatDueDate(note.due_date) : "";
+    const meta = [owner, due, note.status === "inbox" ? "Inbox" : ""].filter(Boolean).join(" · ");
+
+    return (
+      '<div class="brief-item"><strong>' +
+      escapeHtml(action.action || note.title || "Improvement note") +
+      "</strong>" +
+      (meta ? "<span>" + escapeHtml(meta) + "</span>" : "") +
+      "</div>"
+    );
+  }).join("");
+}
+
+function buildHandoverDraft(brief) {
+  const lines = [
+    "ANDIAMO OPERATIONS HANDOVER",
+    formatBriefDay(brief.weekStart) + " – " + formatBriefDay(brief.weekEnd),
+    "",
+    "PRIORITIES / FOLLOW-UP",
+    briefTextItems(brief.followUp),
+    "",
+    "MY ACTIONS",
+    briefTextItems(brief.mine),
+    "",
+    "ASSISTANT ACTIONS",
+    briefTextItems(brief.assistant),
+    "",
+    "OTHER OUTSTANDING",
+    briefTextItems(brief.outstanding.filter(function (note) {
+      return !brief.mine.includes(note) && !brief.assistant.includes(note);
+    })),
+    "",
+    "COMPLETED THIS WEEK",
+    briefTextItems(brief.completed)
+  ];
+
+  return lines.join("\n");
+}
+
+function buildPulseDraft(brief) {
+  const completedByCategory = groupTitlesByCategory(brief.completed);
+  const openByCategory = groupTitlesByCategory(brief.outstanding);
+
+  return [
+    "WEEKLY PULSE STARTING POINTS",
+    formatBriefDay(brief.weekStart) + " – " + formatBriefDay(brief.weekEnd),
+    "",
+    "ACHIEVEMENTS / COMPLETED",
+    completedByCategory || "• None captured in the Hub for this week",
+    "",
+    "CHALLENGES / STILL OPEN",
+    openByCategory || "• None currently outstanding",
+    "",
+    "FOLLOW-UP FOR NEXT WEEK",
+    briefTextItems(brief.followUp)
+  ].join("\n");
+}
+
+function groupTitlesByCategory(notes) {
+  const groups = {};
+
+  notes.forEach(function (note) {
+    const category = note.category || "Unsorted";
+    groups[category] = groups[category] || [];
+    groups[category].push(note);
+  });
+
+  return Object.keys(groups).sort().map(function (category) {
+    return category + "\n" + briefTextItems(groups[category]);
+  }).join("\n\n");
+}
+
+function briefTextItems(notes) {
+  if (!notes.length) {
+    return "• None";
+  }
+
+  return notes.map(function (note) {
+    const action = parseActionData(note.next_action);
+    const owner = action.owner === "assistant" ? "Assistant" : action.owner === "me" ? "Me" : "";
+    const due = note.due_date ? formatDueDate(note.due_date) : "";
+    const detail = [owner, due].filter(Boolean).join(", ");
+    return "• " + (action.action || note.title || "Improvement note") + (detail ? " — " + detail : "");
+  }).join("\n");
+}
+
+async function copyBriefText(textarea, successMessage) {
+  try {
+    await navigator.clipboard.writeText(textarea.value);
+  } catch (_error) {
+    textarea.focus();
+    textarea.select();
+    document.execCommand("copy");
+  }
+
+  showToast(successMessage);
+}
+
+function startOfWeek(value) {
+  const date = startOfDay(value);
+  const daysSinceMonday = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - daysSinceMonday);
+  return date;
+}
+
+function startOfDay(value) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function dateFromIsoDay(value) {
+  const parts = String(value).split("-").map(Number);
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function formatBriefDay(value) {
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(value);
 }
 
 function setRapidReviewBusy(busy) {
