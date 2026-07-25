@@ -199,6 +199,51 @@
             <div id="inboxLoading" class="empty-inbox">Loading your private inbox…</div>
             <div id="inboxList" class="inbox-list" aria-live="polite"></div>
           </section>
+
+          <section id="weeklyBrief" class="panel weekly-brief-panel">
+            <div class="panel-header weekly-brief-heading">
+              <div>
+                <p class="eyebrow">Weekly overview</p>
+                <h3>Operations Brief</h3>
+                <span id="weeklyBriefRange" class="weekly-brief-range"></span>
+              </div>
+              <div class="weekly-brief-controls">
+                <button id="previousBriefWeek" class="secondary-button brief-week-button" type="button" aria-label="Previous week">←</button>
+                <button id="currentBriefWeek" class="secondary-button" type="button">This week</button>
+                <button id="nextBriefWeek" class="secondary-button brief-week-button" type="button" aria-label="Next week">→</button>
+              </div>
+            </div>
+
+            <div id="weeklyBriefSummary" class="weekly-brief-summary" aria-live="polite"></div>
+
+            <div class="weekly-brief-lists">
+              <section class="brief-list-card">
+                <h4>Still outstanding <span id="briefOutstandingCount">0</span></h4>
+                <div id="briefOutstandingList" class="brief-item-list"></div>
+              </section>
+              <section class="brief-list-card">
+                <h4>Completed this week <span id="briefCompletedCount">0</span></h4>
+                <div id="briefCompletedList" class="brief-item-list"></div>
+              </section>
+              <section class="brief-list-card follow-up-card">
+                <h4>Needs follow-up <span id="briefFollowUpCount">0</span></h4>
+                <div id="briefFollowUpList" class="brief-item-list"></div>
+              </section>
+            </div>
+
+            <div class="brief-drafts">
+              <label>
+                Draft handover
+                <textarea id="handoverDraft" rows="10"></textarea>
+                <button id="copyHandover" class="secondary-button copy-brief-button" type="button">Copy handover</button>
+              </label>
+              <label>
+                Weekly Pulse starting points
+                <textarea id="pulseDraft" rows="10"></textarea>
+                <button id="copyPulseDraft" class="secondary-button copy-brief-button" type="button">Copy Pulse notes</button>
+              </label>
+            </div>
+          </section>
         </div>
       </main>
     </div>
@@ -275,6 +320,6 @@
     <div id="hubToast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.7"></script>
-    <script src="operations-hub.js?v=1.1.0"></script>
+    <script src="operations-hub.js?v=1.2.0"></script>
   </body>
 </html>
