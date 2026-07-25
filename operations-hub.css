@@ -661,6 +661,10 @@ body.review-open {
   padding-top: 13px;
 }
 
+.review-card.hidden {
+  display: none;
+}
+
 .review-card input {
   min-height: 44px;
   font-size: 16px;
@@ -781,6 +785,10 @@ body.review-open {
   justify-items: center;
   padding: 34px 12px 20px;
   text-align: center;
+}
+
+.review-empty.hidden {
+  display: none;
 }
 
 .review-empty strong {
