@@ -1431,12 +1431,19 @@ function briefListHtml(notes, emptyMessage) {
 }
 
 function buildHandoverDraft(brief) {
+  const isFollowUp = function (note) {
+    return brief.followUp.includes(note);
+  };
   const sections = [
     ["PRIORITIES / FOLLOW-UP", brief.followUp],
-    ["MY ACTIONS", brief.mine],
-    ["ASSISTANT ACTIONS", brief.assistant],
+    ["MY ACTIONS", brief.mine.filter(function (note) {
+      return !isFollowUp(note);
+    })],
+    ["ASSISTANT ACTIONS", brief.assistant.filter(function (note) {
+      return !isFollowUp(note);
+    })],
     ["OTHER OUTSTANDING", brief.outstanding.filter(function (note) {
-      return !brief.mine.includes(note) && !brief.assistant.includes(note);
+      return !brief.mine.includes(note) && !brief.assistant.includes(note) && !isFollowUp(note);
     })],
     ["COMPLETED THIS WEEK", brief.completed]
   ].filter(function (section) {
