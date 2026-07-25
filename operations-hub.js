@@ -103,6 +103,7 @@ function cacheElements() {
     "statusFilters",
     "inboxLoading",
     "inboxList",
+    "weeklyBrief",
     "weeklyBriefRange",
     "previousBriefWeek",
     "currentBriefWeek",
@@ -152,6 +153,7 @@ function bindEvents() {
   elements.startRapidReview.addEventListener("click", startRapidReview);
   elements.statusFilters.addEventListener("click", changeInboxFilter);
   elements.inboxList.addEventListener("click", handleInboxAction);
+  elements.weeklyBrief.addEventListener("click", handleInboxAction);
   elements.previousBriefWeek.addEventListener("click", function () {
     changeBriefWeek(-7);
   });
@@ -903,6 +905,18 @@ function noteCardHtml(note) {
       transcript +
       action +
       media +
+      '<div class="note-utility-actions" aria-label="Edit note details">' +
+        '<button class="note-utility-button" type="button" data-edit-title="' +
+        escapeHtml(note.id) +
+        '">Edit title</button>' +
+        '<button class="note-utility-button' +
+        (isFollowUpFlagged(note) ? " active" : "") +
+        '" type="button" data-toggle-follow-up="' +
+        escapeHtml(note.id) +
+        '">' +
+        (isFollowUpFlagged(note) ? "Remove follow-up" : "Flag for follow-up") +
+        "</button>" +
+      "</div>" +
       '<div class="note-actions" aria-label="Change note status">' +
         statusButtonHtml(note, "inbox", "Keep in Inbox") +
         statusButtonHtml(note, "action", "Move to Action") +
@@ -1025,6 +1039,19 @@ function changeInboxFilter(event) {
 }
 
 async function handleInboxAction(event) {
+  const editButton = event.target.closest("[data-edit-title]");
+  const followUpButton = event.target.closest("[data-toggle-follow-up]");
+
+  if (editButton) {
+    await editNoteTitle(editButton.dataset.editTitle);
+    return;
+  }
+
+  if (followUpButton) {
+    await toggleFollowUp(followUpButton.dataset.toggleFollowUp, followUpButton);
+    return;
+  }
+
   const button = event.target.closest("[data-status-action]");
 
   if (!button) {
@@ -1064,6 +1091,80 @@ async function handleInboxAction(event) {
   renderInbox();
   renderWeeklyBrief();
   showToast("Note moved to " + statusLabel(newStatus));
+}
+
+async function editNoteTitle(noteId) {
+  const note = hubState.notes.find(function (item) {
+    return item.id === noteId;
+  });
+
+  if (!note) {
+    return;
+  }
+
+  const currentTitle = briefItemTitle(note);
+  const nextTitle = window.prompt("Give this note a clear title", currentTitle);
+
+  if (nextTitle === null || !nextTitle.trim() || nextTitle.trim() === currentTitle) {
+    return;
+  }
+
+  const cleanTitle = nextTitle.trim();
+  const update = { title: cleanTitle };
+  const actionData = parseActionData(note.next_action);
+
+  if (note.next_action) {
+    update.next_action = serialiseActionData(cleanTitle, actionData.owner || "me");
+  }
+
+  const result = await supabaseClient
+    .from("improvement_notes")
+    .update(update)
+    .eq("id", noteId);
+
+  if (result.error) {
+    showToast(friendlyError(result.error));
+    return;
+  }
+
+  Object.assign(note, update, { updated_at: new Date().toISOString() });
+  renderInbox();
+  renderWeeklyBrief();
+  showToast("Title updated");
+}
+
+async function toggleFollowUp(noteId, button) {
+  const note = hubState.notes.find(function (item) {
+    return item.id === noteId;
+  });
+
+  if (!note) {
+    return;
+  }
+
+  const priority = isFollowUpFlagged(note) ? "normal" : "high";
+  setButtonBusy(button, true, "Saving…");
+
+  const result = await supabaseClient
+    .from("improvement_notes")
+    .update({ priority: priority })
+    .eq("id", noteId);
+
+  setButtonBusy(button, false);
+
+  if (result.error) {
+    showToast(friendlyError(result.error));
+    return;
+  }
+
+  Object.assign(note, { priority: priority, updated_at: new Date().toISOString() });
+  renderInbox();
+  renderWeeklyBrief();
+  showToast(priority === "high" ? "Flagged for follow-up" : "Follow-up flag removed");
+}
+
+function isFollowUpFlagged(note) {
+  return note.priority === "high" || note.priority === "urgent";
 }
 
 function updateInboxCount() {
@@ -1315,36 +1416,41 @@ function briefListHtml(notes, emptyMessage) {
 
     return (
       '<div class="brief-item"><strong>' +
-      escapeHtml(action.action || note.title || "Improvement note") +
+      escapeHtml(briefItemTitle(note)) +
       "</strong>" +
       (meta ? "<span>" + escapeHtml(meta) + "</span>" : "") +
+      '<div class="brief-item-actions">' +
+        '<button type="button" data-edit-title="' + escapeHtml(note.id) + '">Edit title</button>' +
+        '<button type="button" data-toggle-follow-up="' + escapeHtml(note.id) + '">' +
+        (isFollowUpFlagged(note) ? "Unflag" : "Follow-up") +
+        "</button>" +
+      "</div>" +
       "</div>"
     );
   }).join("");
 }
 
 function buildHandoverDraft(brief) {
+  const sections = [
+    ["PRIORITIES / FOLLOW-UP", brief.followUp],
+    ["MY ACTIONS", brief.mine],
+    ["ASSISTANT ACTIONS", brief.assistant],
+    ["OTHER OUTSTANDING", brief.outstanding.filter(function (note) {
+      return !brief.mine.includes(note) && !brief.assistant.includes(note);
+    })],
+    ["COMPLETED THIS WEEK", brief.completed]
+  ].filter(function (section) {
+    return section[1].length;
+  });
+
   const lines = [
     "ANDIAMO OPERATIONS HANDOVER",
-    formatBriefDay(brief.weekStart) + " – " + formatBriefDay(brief.weekEnd),
-    "",
-    "PRIORITIES / FOLLOW-UP",
-    briefTextItems(brief.followUp),
-    "",
-    "MY ACTIONS",
-    briefTextItems(brief.mine),
-    "",
-    "ASSISTANT ACTIONS",
-    briefTextItems(brief.assistant),
-    "",
-    "OTHER OUTSTANDING",
-    briefTextItems(brief.outstanding.filter(function (note) {
-      return !brief.mine.includes(note) && !brief.assistant.includes(note);
-    })),
-    "",
-    "COMPLETED THIS WEEK",
-    briefTextItems(brief.completed)
+    formatBriefDay(brief.weekStart) + " – " + formatBriefDay(brief.weekEnd)
   ];
+
+  sections.forEach(function (section) {
+    lines.push("", section[0], briefTextItems(section[1]));
+  });
 
   return lines.join("\n");
 }
@@ -1392,8 +1498,25 @@ function briefTextItems(notes) {
     const owner = action.owner === "assistant" ? "Assistant" : action.owner === "me" ? "Me" : "";
     const due = note.due_date ? formatDueDate(note.due_date) : "";
     const detail = [owner, due].filter(Boolean).join(", ");
-    return "• " + (action.action || note.title || "Improvement note") + (detail ? " — " + detail : "");
+    return "• " + briefItemTitle(note) + (detail ? " — " + detail : "");
   }).join("\n");
+}
+
+function briefItemTitle(note) {
+  const action = parseActionData(note.next_action);
+  const title = action.action || note.title || "";
+  const genericTitles = ["Voice note", "Photo note", "Voice and photo note", "Improvement note"];
+  const isTruncated = /(?:…|\.\.\.)$/.test(title.trim());
+
+  if ((isTruncated || genericTitles.includes(title)) && note.transcript && note.transcript.trim()) {
+    return note.transcript.trim();
+  }
+
+  if ((isTruncated || genericTitles.includes(title)) && note.body && note.body.trim()) {
+    return note.body.trim();
+  }
+
+  return title || "Improvement note";
 }
 
 async function copyBriefText(textarea, successMessage) {
