@@ -19,6 +19,11 @@ const hubState = {
   recordingChunks: [],
   speechRecognition: null,
   speechRecognitionRunning: false,
+  speechRecognitionShouldRun: false,
+  speechRecognitionRestartTimer: null,
+  speechCommittedTranscript: "",
+  speechRecognitionFailureCount: 0,
+  speechRecognitionLastError: "",
   reviewQueue: [],
   reviewIndex: 0,
   reviewDue: "",
@@ -422,26 +427,31 @@ async function startVoiceRecording() {
       }
     });
 
-    hubState.mediaRecorder.addEventListener("stop", finishVoiceRecording);
-    hubState.mediaRecorder.start();
-    startBrowserTranscription();
-
     elements.startRecording.disabled = true;
     elements.startRecording.classList.add("recording");
     elements.startRecording.textContent = "Recording…";
     elements.stopRecording.classList.remove("hidden");
     elements.voiceHelp.textContent = "Speak now. Tap stop when you are finished.";
     showCaptureMessage("");
+
+    hubState.mediaRecorder.addEventListener("stop", finishVoiceRecording);
+    startBrowserTranscription();
+    hubState.mediaRecorder.start();
   } catch (error) {
+    stopBrowserTranscription();
     stopActiveMediaStream();
     showCaptureMessage("Microphone access was not available. You can allow it in your browser or choose an audio file.", "error");
   }
 }
 
-function stopVoiceRecording() {
+async function stopVoiceRecording() {
   if (hubState.mediaRecorder && hubState.mediaRecorder.state !== "inactive") {
     elements.stopRecording.disabled = true;
-    hubState.mediaRecorder.stop();
+    await stopBrowserTranscription(true);
+
+    if (hubState.mediaRecorder && hubState.mediaRecorder.state !== "inactive") {
+      hubState.mediaRecorder.stop();
+    }
   }
 }
 
@@ -468,7 +478,7 @@ function finishVoiceRecording() {
   elements.startRecording.textContent = "Start recording";
   elements.stopRecording.disabled = false;
   elements.stopRecording.classList.add("hidden");
-  elements.voiceHelp.textContent = "Recording ready. You can listen before saving.";
+  elements.voiceHelp.textContent = voiceRecordingReadyMessage();
   elements.transcriptField.classList.remove("hidden");
 }
 
@@ -541,72 +551,239 @@ function clearAudio() {
 }
 
 function startBrowserTranscription() {
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const Recognition = speechRecognitionConstructor();
 
   if (!Recognition) {
+    hubState.speechRecognitionShouldRun = false;
+    hubState.speechRecognitionLastError = "unsupported";
+    return false;
+  }
+
+  hubState.speechRecognitionShouldRun = true;
+  hubState.speechCommittedTranscript = elements.noteTranscript.value.trim();
+  hubState.speechRecognitionFailureCount = 0;
+  hubState.speechRecognitionLastError = "";
+  startSpeechRecognitionSession();
+  return true;
+}
+
+function startSpeechRecognitionSession() {
+  const Recognition = speechRecognitionConstructor();
+
+  if (!Recognition || !hubState.speechRecognitionShouldRun || hubState.speechRecognition) {
     return;
   }
 
   const recognition = new Recognition();
-  const existingTranscript = elements.noteTranscript.value.trim();
-  let finalTranscript = existingTranscript;
+  let sessionFinalTranscript = "";
+  let sessionInterimTranscript = "";
 
   recognition.lang = "en-AU";
   recognition.continuous = true;
   recognition.interimResults = true;
 
   recognition.addEventListener("result", function (event) {
-    let interimTranscript = "";
+    if (hubState.speechRecognition !== recognition) {
+      return;
+    }
 
-    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+    const finalParts = [];
+    const interimParts = [];
+
+    for (let index = 0; index < event.results.length; index += 1) {
       const text = event.results[index][0].transcript.trim();
 
       if (event.results[index].isFinal) {
-        finalTranscript = joinTranscript(finalTranscript, text);
+        finalParts.push(text);
       } else {
-        interimTranscript = joinTranscript(interimTranscript, text);
+        interimParts.push(text);
       }
     }
 
-    elements.noteTranscript.value = joinTranscript(finalTranscript, interimTranscript);
+    sessionFinalTranscript = joinTranscriptParts(finalParts);
+    sessionInterimTranscript = joinTranscriptParts(interimParts);
+    elements.noteTranscript.value = joinTranscriptParts([
+      hubState.speechCommittedTranscript,
+      sessionFinalTranscript,
+      sessionInterimTranscript
+    ]);
     elements.transcriptField.classList.remove("hidden");
+    hubState.speechRecognitionFailureCount = 0;
+    hubState.speechRecognitionLastError = "";
     elements.voiceHelp.textContent = "Recording and creating a draft title. Tap stop when finished.";
   });
 
-  recognition.addEventListener("error", function () {
+  recognition.addEventListener("start", function () {
+    if (hubState.speechRecognition === recognition) {
+      hubState.speechRecognitionRunning = true;
+      elements.voiceHelp.textContent = "Recording and listening for transcription. Tap stop when finished.";
+    }
+  });
+
+  recognition.addEventListener("error", function (event) {
+    if (hubState.speechRecognition !== recognition) {
+      return;
+    }
+
     hubState.speechRecognitionRunning = false;
-    elements.voiceHelp.textContent = "Recording continues. Automatic wording is unavailable on this browser.";
+    hubState.speechRecognitionLastError = event.error || "unknown";
+
+    if (speechRecognitionErrorIsFatal(hubState.speechRecognitionLastError)) {
+      hubState.speechRecognitionShouldRun = false;
+    } else if (hubState.speechRecognitionLastError !== "no-speech") {
+      hubState.speechRecognitionFailureCount += 1;
+
+      if (hubState.speechRecognitionFailureCount >= 3) {
+        hubState.speechRecognitionShouldRun = false;
+      }
+    }
+
+    elements.voiceHelp.textContent = transcriptionFailureMessage(hubState.speechRecognitionLastError);
   });
 
   recognition.addEventListener("end", function () {
+    if (hubState.speechRecognition !== recognition) {
+      return;
+    }
+
+    commitSpeechRecognitionSession(sessionFinalTranscript, sessionInterimTranscript);
+    hubState.speechRecognition = null;
     hubState.speechRecognitionRunning = false;
+
+    if (hubState.speechRecognitionShouldRun) {
+      scheduleSpeechRecognitionRestart();
+    }
   });
+
+  hubState.speechRecognition = recognition;
 
   try {
     recognition.start();
-    hubState.speechRecognition = recognition;
     hubState.speechRecognitionRunning = true;
   } catch (_error) {
     hubState.speechRecognition = null;
     hubState.speechRecognitionRunning = false;
+    hubState.speechRecognitionLastError = "start-failed";
+    hubState.speechRecognitionFailureCount += 1;
+
+    if (hubState.speechRecognitionShouldRun && hubState.speechRecognitionFailureCount < 3) {
+      scheduleSpeechRecognitionRestart();
+    } else {
+      hubState.speechRecognitionShouldRun = false;
+      elements.voiceHelp.textContent = transcriptionFailureMessage("start-failed");
+    }
   }
 }
 
-function stopBrowserTranscription() {
-  if (hubState.speechRecognition && hubState.speechRecognitionRunning) {
-    try {
-      hubState.speechRecognition.stop();
-    } catch (_error) {
-      // The recording remains the reliable fallback if browser speech recognition stops early.
-    }
+function scheduleSpeechRecognitionRestart() {
+  window.clearTimeout(hubState.speechRecognitionRestartTimer);
+  hubState.speechRecognitionRestartTimer = window.setTimeout(function () {
+    hubState.speechRecognitionRestartTimer = null;
+    startSpeechRecognitionSession();
+  }, 250);
+}
+
+function commitSpeechRecognitionSession(finalTranscript, interimTranscript) {
+  const sessionTranscript = joinTranscript(finalTranscript, interimTranscript);
+
+  if (!sessionTranscript) {
+    return;
   }
 
-  hubState.speechRecognition = null;
-  hubState.speechRecognitionRunning = false;
+  hubState.speechCommittedTranscript = joinTranscript(
+    hubState.speechCommittedTranscript,
+    sessionTranscript
+  );
+  elements.noteTranscript.value = hubState.speechCommittedTranscript;
+  elements.transcriptField.classList.remove("hidden");
+}
+
+function stopBrowserTranscription(waitForFinalResult) {
+  hubState.speechRecognitionShouldRun = false;
+  window.clearTimeout(hubState.speechRecognitionRestartTimer);
+  hubState.speechRecognitionRestartTimer = null;
+
+  const recognition = hubState.speechRecognition;
+
+  if (!recognition) {
+    hubState.speechRecognitionRunning = false;
+    return Promise.resolve();
+  }
+
+  const stopMethod = waitForFinalResult ? "stop" : "abort";
+  let finish;
+  const finished = new Promise(function (resolve) {
+    finish = resolve;
+  });
+  const settle = function () {
+    if (hubState.speechRecognition === recognition) {
+      hubState.speechRecognition = null;
+      hubState.speechRecognitionRunning = false;
+    }
+
+    window.clearTimeout(timeout);
+    finish();
+  };
+  const timeout = window.setTimeout(settle, waitForFinalResult ? 900 : 0);
+
+  recognition.addEventListener("end", settle, { once: true });
+
+  try {
+    recognition[stopMethod]();
+  } catch (_error) {
+    settle();
+  }
+
+  if (!waitForFinalResult) {
+    hubState.speechRecognition = null;
+    hubState.speechRecognitionRunning = false;
+  }
+
+  return finished;
+}
+
+function speechRecognitionConstructor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function speechRecognitionErrorIsFatal(errorCode) {
+  return errorCode === "not-allowed" || errorCode === "service-not-allowed";
+}
+
+function transcriptionFailureMessage(errorCode) {
+  if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
+    return "Recording continues. Chrome blocked automatic transcription; the audio will still be saved.";
+  }
+
+  if (errorCode === "audio-capture") {
+    return "Recording continues. Chrome could not share the microphone with transcription; the audio will still be saved.";
+  }
+
+  if (errorCode === "network") {
+    return "Recording continues. The transcription connection was interrupted; the audio will still be saved.";
+  }
+
+  return "Recording continues. Automatic transcription is temporarily unavailable; the audio will still be saved.";
+}
+
+function voiceRecordingReadyMessage() {
+  if (elements.noteTranscript.value.trim()) {
+    return "Recording and transcript ready. You can correct the wording before saving.";
+  }
+
+  if (!speechRecognitionConstructor()) {
+    return "Recording ready. Automatic transcription is not supported by this browser, but the audio is safe.";
+  }
+
+  return "Recording ready, but Chrome did not return a transcript this time. The audio is safe.";
 }
 
 function joinTranscript(first, second) {
   return [first, second].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+function joinTranscriptParts(parts) {
+  return parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
 function clearAudioPreviewUrl() {
