@@ -96,6 +96,7 @@ function cacheElements() {
     "audioInput",
     "audioPreviewWrap",
     "audioPreview",
+    "transcribeAudio",
     "removeAudio",
     "transcriptField",
     "noteTranscript",
@@ -151,6 +152,7 @@ function bindEvents() {
   elements.startRecording.addEventListener("click", startVoiceRecording);
   elements.stopRecording.addEventListener("click", stopVoiceRecording);
   elements.audioInput.addEventListener("change", selectAudioFile);
+  elements.transcribeAudio.addEventListener("click", retryAudioTranscription);
   elements.removeAudio.addEventListener("click", clearAudio);
   elements.startRapidReview.addEventListener("click", startRapidReview);
   elements.statusFilters.addEventListener("click", changeInboxFilter);
@@ -533,6 +535,7 @@ function clearAudio() {
   elements.audioInput.value = "";
   elements.audioPreview.removeAttribute("src");
   elements.audioPreviewWrap.classList.add("hidden");
+  elements.transcribeAudio.classList.add("hidden");
   elements.transcriptField.classList.add("hidden");
   elements.noteTranscript.value = "";
   elements.startRecording.disabled = false;
@@ -543,24 +546,39 @@ function clearAudio() {
   elements.voiceHelp.textContent = "Tap start, speak, then tap stop.";
 }
 
-async function transcribeRecordedAudio(file) {
+async function retryAudioTranscription() {
+  if (!hubState.audioFile) {
+    return;
+  }
+
+  await transcribeRecordedAudio(hubState.audioFile, true);
+}
+
+async function transcribeRecordedAudio(file, userInitiated) {
   const Recognition = speechRecognitionConstructor();
 
   if (!Recognition || !file) {
     elements.startRecording.disabled = false;
+    elements.transcribeAudio.classList.add("hidden");
     elements.voiceHelp.textContent = voiceRecordingReadyMessage("unsupported");
     return;
   }
 
   stopPostRecordingTranscription();
   setTranscriptionBusy(true);
+  elements.transcribeAudio.classList.add("hidden");
   elements.voiceHelp.textContent = "Recording ready. Creating transcript…";
 
   const existingTranscript = elements.noteTranscript.value.trim();
   let result;
 
   try {
-    result = await recogniseAudioTrack(file, Recognition, existingTranscript);
+    result = await recogniseAudioTrack(
+      file,
+      Recognition,
+      existingTranscript,
+      Boolean(userInitiated)
+    );
   } catch (_error) {
     result = { transcript: "", error: "start-failed" };
   } finally {
@@ -573,13 +591,15 @@ async function transcribeRecordedAudio(file) {
       result.transcript
     );
     elements.voiceHelp.textContent = "Recording and transcript ready. You can correct the wording before saving.";
+    elements.transcribeAudio.classList.add("hidden");
     return;
   }
 
+  elements.transcribeAudio.classList.remove("hidden");
   elements.voiceHelp.textContent = voiceRecordingReadyMessage(result.error);
 }
 
-function recogniseAudioTrack(file, Recognition, existingTranscript) {
+function recogniseAudioTrack(file, Recognition, existingTranscript, userInitiated) {
   return new Promise(function (resolve) {
     const audioElement = new Audio();
     const audioUrl = URL.createObjectURL(file);
@@ -637,7 +657,7 @@ function recogniseAudioTrack(file, Recognition, existingTranscript) {
     hubState.cancelAudioTranscription = cancel;
 
     audioElement.preload = "auto";
-    audioElement.muted = true;
+    audioElement.muted = !userInitiated;
     audioElement.src = audioUrl;
 
     audioElement.addEventListener("error", function () {
@@ -672,8 +692,8 @@ function recogniseAudioTrack(file, Recognition, existingTranscript) {
       hubState.speechAudioStream = capturedStream;
 
       recognition.lang = "en-AU";
-      recognition.continuous = true;
-      recognition.interimResults = true;
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
       recognition.addEventListener("result", function (event) {
         const transcriptParts = [];
@@ -692,6 +712,13 @@ function recogniseAudioTrack(file, Recognition, existingTranscript) {
       });
 
       recognition.addEventListener("end", finish, { once: true });
+      recognition.addEventListener("speechend", function () {
+        try {
+          recognition.stop();
+        } catch (_error) {
+          finish();
+        }
+      }, { once: true });
       audioElement.addEventListener("ended", function () {
         stopTimer = window.setTimeout(function () {
           try {
@@ -743,6 +770,7 @@ function setTranscriptionBusy(isBusy) {
   elements.removeAudio.disabled = isBusy;
   elements.audioInput.disabled = isBusy;
   elements.saveNoteButton.disabled = isBusy;
+  elements.transcribeAudio.disabled = isBusy;
 }
 
 function speechRecognitionConstructor() {
@@ -758,7 +786,24 @@ function voiceRecordingReadyMessage(errorCode) {
     return "Recording ready. Automatic transcription is not supported by this browser, but the audio is safe.";
   }
 
-  return "Recording ready, but Chrome did not return a transcript this time. The audio is safe.";
+  const errorLabels = {
+    "not-allowed": "permission was denied",
+    "service-not-allowed": "the speech service was unavailable",
+    "audio-capture": "the saved audio track could not be read",
+    "audio-load": "the recording could not be loaded",
+    "track-unsupported": "audio-track transcription is unsupported",
+    "track-unavailable": "the saved audio track was unavailable",
+    "playback-blocked": "Chrome blocked the recording replay",
+    "network": "the speech service could not connect",
+    "no-speech": "no speech was detected",
+    "aborted": "transcription was interrupted",
+    "timeout": "transcription timed out",
+    "start-failed": "transcription could not start",
+    "unknown": "an unknown speech error occurred"
+  };
+  const detail = errorLabels[errorCode] || "no speech result was returned";
+
+  return "Recording ready, but " + detail + ". Tap “Try transcription again”; Chrome may briefly replay the recording. The audio is safe.";
 }
 
 function joinTranscript(first, second) {
