@@ -144,6 +144,7 @@
                     <input id="audioInput" class="visually-hidden" type="file" accept="audio/*" capture />
                     <div id="audioPreviewWrap" class="media-preview hidden">
                       <audio id="audioPreview" controls></audio>
+                      <button id="transcribeAudio" class="secondary-button hidden" type="button">Try transcription again</button>
                       <button id="removeAudio" class="text-button" type="button">Remove recording</button>
                     </div>
                   </section>
@@ -320,6 +321,6 @@
     <div id="hubToast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.7"></script>
-    <script src="operations-hub.js?v=1.3.4"></script>
+    <script src="operations-hub.js?v=1.3.5"></script>
   </body>
 </html>
