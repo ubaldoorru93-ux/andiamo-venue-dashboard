@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Operations Hub transcription check</title>
+    <style>
+      :root {
+        color: #27251f;
+        background: #f6f0df;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px 16px 48px;
+      }
+
+      main {
+        width: min(680px, 100%);
+        margin: 0 auto;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(1.8rem, 7vw, 2.6rem);
+        line-height: 1.05;
+      }
+
+      .intro {
+        margin: 0 0 20px;
+        color: #625f55;
+        font-size: 1.05rem;
+        line-height: 1.45;
+      }
+
+      .card {
+        margin-top: 16px;
+        padding: 18px;
+        border: 1px solid #d9d0bb;
+        border-radius: 16px;
+        background: #fffdf7;
+        box-shadow: 0 8px 24px rgb(68 56 32 / 8%);
+      }
+
+      h2 {
+        margin: 0 0 8px;
+        font-size: 1.25rem;
+      }
+
+      p {
+        line-height: 1.45;
+      }
+
+      button {
+        width: 100%;
+        min-height: 54px;
+        margin-top: 10px;
+        border: 0;
+        border-radius: 11px;
+        padding: 12px 16px;
+        background: #1d6b51;
+        color: white;
+        font: inherit;
+        font-weight: 750;
+      }
+
+      button.secondary {
+        border: 1px solid #cdbf9d;
+        background: #f5efe0;
+        color: #27251f;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.55;
+      }
+
+      audio {
+        width: 100%;
+        margin-top: 14px;
+      }
+
+      .status {
+        min-height: 1.5em;
+        margin: 12px 0 0;
+        font-weight: 650;
+      }
+
+      .result {
+        margin: 10px 0 0;
+        padding: 12px;
+        border-radius: 10px;
+        background: #f2eee3;
+        white-space: pre-wrap;
+      }
+
+      .result:empty {
+        display: none;
+      }
+
+      .privacy {
+        color: #625f55;
+        font-size: 0.92rem;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Voice transcription check</h1>
+      <p class="intro">
+        This temporary page tests your phone only. The recording stays in this browser tab and is
+        never uploaded.
+      </p>
+
+      <section class="card">
+        <h2>1. Make one test recording</h2>
+        <p>Say: “The stick light needs replacing tomorrow.”</p>
+        <button id="startRecording" type="button">Start recording</button>
+        <button id="stopRecording" class="secondary hidden" type="button">Stop</button>
+        <audio id="preview" class="hidden" controls></audio>
+        <p id="recordingStatus" class="status" role="status"></p>
+      </section>
+
+      <section id="testCard" class="card hidden">
+        <h2>2. Test the Hub’s current method</h2>
+        <p>
+          Your phone will briefly replay the recording. This checks whether Chrome can hear the
+          captured audio track.
+        </p>
+        <button id="testCurrent" type="button">Run current-method test</button>
+        <p id="testStatus" class="status" role="status"></p>
+        <div id="testResult" class="result" aria-live="polite"></div>
+      </section>
+
+      <p class="privacy">
+        Close this tab at any time to erase the temporary recording.
+      </p>
+    </main>
+
+    <script>
+      "use strict";
+
+      const state = {
+        recorder: null,
+        stream: null,
+        chunks: [],
+        file: null,
+        objectUrl: ""
+      };
+
+      const startButton = document.getElementById("startRecording");
+      const stopButton = document.getElementById("stopRecording");
+      const preview = document.getElementById("preview");
+      const recordingStatus = document.getElementById("recordingStatus");
+      const testCard = document.getElementById("testCard");
+      const testButton = document.getElementById("testCurrent");
+      const testStatus = document.getElementById("testStatus");
+      const testResult = document.getElementById("testResult");
+
+      startButton.addEventListener("click", startRecording);
+      stopButton.addEventListener("click", stopRecording);
+      testButton.addEventListener("click", testCurrentMethod);
+
+      async function startRecording() {
+        if (!navigator.mediaDevices || !window.MediaRecorder) {
+          recordingStatus.textContent = "This browser cannot make the test recording.";
+          return;
+        }
+
+        try {
+          clearRecording();
+          state.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          state.chunks = [];
+
+          const mimeType = chooseMimeType();
+          state.recorder = new MediaRecorder(
+            state.stream,
+            mimeType ? { mimeType: mimeType } : undefined
+          );
+
+          state.recorder.addEventListener("dataavailable", (event) => {
+            if (event.data && event.data.size) {
+              state.chunks.push(event.data);
+            }
+          });
+          state.recorder.addEventListener("stop", finishRecording, { once: true });
+          state.recorder.start();
+
+          startButton.disabled = true;
+          stopButton.classList.remove("hidden");
+          recordingStatus.textContent = "Recording…";
+        } catch (error) {
+          recordingStatus.textContent = "Microphone unavailable: " + friendlyError(error);
+          stopTracks();
+        }
+      }
+
+      function stopRecording() {
+        if (state.recorder && state.recorder.state !== "inactive") {
+          stopButton.disabled = true;
+          recordingStatus.textContent = "Finishing…";
+          state.recorder.stop();
+        }
+      }
+
+      function finishRecording() {
+        const mimeType =
+          state.recorder.mimeType ||
+          (state.chunks[0] && state.chunks[0].type) ||
+          "audio/webm";
+        const blob = new Blob(state.chunks, { type: mimeType });
+        state.file = new File([blob], "diagnostic-recording", { type: mimeType });
+        state.objectUrl = URL.createObjectURL(state.file);
+        preview.src = state.objectUrl;
+        preview.classList.remove("hidden");
+        testCard.classList.remove("hidden");
+        startButton.disabled = false;
+        stopButton.disabled = false;
+        stopButton.classList.add("hidden");
+        recordingStatus.textContent =
+          "Recording ready: " + mimeType + ", " + Math.round(blob.size / 1024) + " KB.";
+        stopTracks();
+      }
+
+      async function testCurrentMethod() {
+        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const signalContext = AudioContext ? new AudioContext() : null;
+
+        if (!Recognition || !state.file) {
+          testStatus.textContent = "Speech recognition is unavailable.";
+          if (signalContext) {
+            signalContext.close();
+          }
+          return;
+        }
+
+        if (signalContext && signalContext.state === "suspended") {
+          await signalContext.resume();
+        }
+
+        testButton.disabled = true;
+        testResult.textContent = "";
+        testStatus.textContent = "Loading and checking the recorded audio…";
+
+        const audio = new Audio();
+        const url = URL.createObjectURL(state.file);
+        audio.src = url;
+        audio.preload = "auto";
+
+        try {
+          await once(audio, "canplay", "error");
+          const capture = audio.captureStream || audio.webkitCaptureStream;
+
+          if (!capture) {
+            throw new Error("captureStream is unavailable");
+          }
+
+          const capturedStream = capture.call(audio);
+          const track = capturedStream.getAudioTracks()[0];
+
+          if (!track) {
+            throw new Error("No audio track was created");
+          }
+
+          const events = [];
+          const recognition = new Recognition();
+          recognition.lang = "en-US";
+          recognition.continuous = false;
+          recognition.interimResults = false;
+
+          [
+            "start",
+            "audiostart",
+            "soundstart",
+            "speechstart",
+            "speechend",
+            "soundend",
+            "audioend",
+            "nomatch",
+            "end"
+          ].forEach((name) => {
+            recognition.addEventListener(name, () => events.push(name));
+          });
+
+          let transcript = "";
+          let recognitionError = "";
+          recognition.addEventListener("result", (event) => {
+            events.push("result");
+            transcript = event.results[0][0].transcript.trim();
+          });
+          recognition.addEventListener("error", (event) => {
+            events.push("error:" + event.error);
+            recognitionError = event.error || "unknown";
+          });
+
+          const meter = createSignalMeter(capturedStream, signalContext);
+          const recognitionEnded = once(recognition, "end", "error");
+          const playbackEnded = once(audio, "ended", "error");
+
+          await audio.play();
+          recognition.start(track);
+          testStatus.textContent = "Listening to the saved recording…";
+
+          await Promise.race([
+            Promise.allSettled([recognitionEnded, playbackEnded]),
+            delay(20000)
+          ]);
+
+          try {
+            recognition.stop();
+          } catch (_error) {
+            // Recognition may already have ended.
+          }
+
+          await delay(500);
+          const signal = meter.stop();
+          capturedStream.getTracks().forEach((item) => item.stop());
+
+          testStatus.textContent = transcript
+            ? "Transcript received."
+            : "No transcript received.";
+          testResult.textContent = [
+            "Transcript: " + (transcript || "none"),
+            "Recognition error: " + (recognitionError || "none"),
+            "Speech events: " + (events.join(" → ") || "none"),
+            "Audio signal detected: " + (signal.peak > 0.01 ? "yes" : "no"),
+            "Signal peak: " + signal.peak.toFixed(4),
+            "Track: " + track.kind + ", " + track.readyState + ", muted=" + track.muted
+          ].join("\n");
+        } catch (error) {
+          testStatus.textContent = "The test could not finish.";
+          testResult.textContent = "Technical result: " + friendlyError(error);
+        } finally {
+          audio.pause();
+          URL.revokeObjectURL(url);
+          if (signalContext && signalContext.state !== "closed") {
+            signalContext.close();
+          }
+          testButton.disabled = false;
+        }
+      }
+
+      function createSignalMeter(stream, context) {
+        if (!context) {
+          return { stop: () => ({ peak: -1 }) };
+        }
+
+        const source = context.createMediaStreamSource(stream);
+        const analyser = context.createAnalyser();
+        const silentGain = context.createGain();
+        const samples = new Uint8Array(analyser.fftSize);
+        let peak = 0;
+        let frame = 0;
+
+        silentGain.gain.value = 0;
+        source.connect(analyser);
+        analyser.connect(silentGain);
+        silentGain.connect(context.destination);
+
+        const measure = () => {
+          analyser.getByteTimeDomainData(samples);
+          for (let index = 0; index < samples.length; index += 1) {
+            peak = Math.max(peak, Math.abs(samples[index] - 128) / 128);
+          }
+          frame = requestAnimationFrame(measure);
+        };
+        measure();
+
+        return {
+          stop() {
+            cancelAnimationFrame(frame);
+            source.disconnect();
+            analyser.disconnect();
+            silentGain.disconnect();
+            return { peak };
+          }
+        };
+      }
+
+      function once(target, successEvent, errorEvent) {
+        return new Promise((resolve, reject) => {
+          target.addEventListener(successEvent, resolve, { once: true });
+          if (errorEvent) {
+            target.addEventListener(
+              errorEvent,
+              (event) => reject(event.error || new Error(errorEvent)),
+              { once: true }
+            );
+          }
+        });
+      }
+
+      function chooseMimeType() {
+        return [
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/mp4",
+          "audio/ogg;codecs=opus"
+        ].find((type) => MediaRecorder.isTypeSupported(type)) || "";
+      }
+
+      function stopTracks() {
+        if (state.stream) {
+          state.stream.getTracks().forEach((track) => track.stop());
+          state.stream = null;
+        }
+      }
+
+      function clearRecording() {
+        stopTracks();
+        if (state.objectUrl) {
+          URL.revokeObjectURL(state.objectUrl);
+        }
+        state.file = null;
+        state.objectUrl = "";
+        preview.removeAttribute("src");
+        preview.classList.add("hidden");
+        testCard.classList.add("hidden");
+        testResult.textContent = "";
+        testStatus.textContent = "";
+      }
+
+      function delay(milliseconds) {
+        return new Promise((resolve) => setTimeout(resolve, milliseconds));
+      }
+
+      function friendlyError(error) {
+        if (!error) {
+          return "unknown error";
+        }
+        return error.message || error.name || String(error);
+      }
+    </script>
+  </body>
+</html>
