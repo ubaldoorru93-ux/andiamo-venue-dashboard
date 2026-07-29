@@ -132,12 +132,12 @@
       </section>
 
       <section id="testCard" class="card hidden">
-        <h2>2. Test the Hub’s current method</h2>
+        <h2>2. Test the official browser timing</h2>
         <p>
-          Your phone will briefly replay the recording. This checks whether Chrome can hear the
-          captured audio track.
+          Your phone will briefly replay the recording. This starts playback and recognition
+          together, matching the official working example.
         </p>
-        <button id="testCurrent" type="button">Run current-method test</button>
+        <button id="testCurrent" type="button">Run official-timing test</button>
         <p id="testStatus" class="status" role="status"></p>
         <div id="testResult" class="result" aria-live="polite"></div>
       </section>
@@ -308,8 +308,9 @@
           const recognitionEnded = once(recognition, "end", "error");
           const playbackEnded = once(audio, "ended", "error");
 
-          await audio.play();
+          const playbackStarted = audio.play();
           recognition.start(track);
+          await playbackStarted;
           testStatus.textContent = "Listening to the saved recording…";
 
           await Promise.race([
