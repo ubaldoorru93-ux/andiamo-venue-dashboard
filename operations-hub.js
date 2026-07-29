@@ -18,12 +18,9 @@ const hubState = {
   mediaStream: null,
   recordingChunks: [],
   speechRecognition: null,
-  speechRecognitionRunning: false,
-  speechRecognitionShouldRun: false,
-  speechRecognitionRestartTimer: null,
-  speechCommittedTranscript: "",
-  speechRecognitionFailureCount: 0,
-  speechRecognitionLastError: "",
+  speechAudioElement: null,
+  speechAudioStream: null,
+  cancelAudioTranscription: null,
   reviewQueue: [],
   reviewIndex: 0,
   reviewDue: "",
@@ -188,7 +185,10 @@ function bindEvents() {
       closeRapidReview();
     }
   });
-  window.addEventListener("beforeunload", stopActiveMediaStream);
+  window.addEventListener("beforeunload", function () {
+    stopPostRecordingTranscription();
+    stopActiveMediaStream();
+  });
 }
 
 async function handleSession(session) {
@@ -221,7 +221,7 @@ async function handleSession(session) {
 }
 
 function showSignedOutView() {
-  stopBrowserTranscription();
+  stopPostRecordingTranscription();
   closeRapidReview();
   hubState.user = null;
   hubState.venue = null;
@@ -436,28 +436,21 @@ async function startVoiceRecording() {
 
     hubState.mediaRecorder.addEventListener("stop", finishVoiceRecording);
     hubState.mediaRecorder.start();
-    startBrowserTranscription();
   } catch (error) {
-    stopBrowserTranscription();
     stopActiveMediaStream();
     showCaptureMessage("Microphone access was not available. You can allow it in your browser or choose an audio file.", "error");
   }
 }
 
-async function stopVoiceRecording() {
+function stopVoiceRecording() {
   if (hubState.mediaRecorder && hubState.mediaRecorder.state !== "inactive") {
     elements.stopRecording.disabled = true;
-    await stopBrowserTranscription(true);
-
-    if (hubState.mediaRecorder && hubState.mediaRecorder.state !== "inactive") {
-      hubState.mediaRecorder.stop();
-    }
+    elements.voiceHelp.textContent = "Finishing recording…";
+    hubState.mediaRecorder.stop();
   }
 }
 
-function finishVoiceRecording() {
-  stopBrowserTranscription();
-
+async function finishVoiceRecording() {
   const mimeType =
     (hubState.mediaRecorder && hubState.mediaRecorder.mimeType) ||
     (hubState.recordingChunks[0] && hubState.recordingChunks[0].type) ||
@@ -473,13 +466,13 @@ function finishVoiceRecording() {
 
   hubState.mediaRecorder = null;
   hubState.recordingChunks = [];
-  elements.startRecording.disabled = false;
   elements.startRecording.classList.remove("recording");
   elements.startRecording.textContent = "Start recording";
   elements.stopRecording.disabled = false;
   elements.stopRecording.classList.add("hidden");
-  elements.voiceHelp.textContent = voiceRecordingReadyMessage();
   elements.transcriptField.classList.remove("hidden");
+
+  await transcribeRecordedAudio(hubState.audioFile);
 }
 
 function chooseRecordingMimeType() {
@@ -528,7 +521,7 @@ function showAudioPreview(file) {
 }
 
 function clearAudio() {
-  stopBrowserTranscription();
+  stopPostRecordingTranscription();
 
   if (hubState.mediaRecorder && hubState.mediaRecorder.state !== "inactive") {
     hubState.mediaRecorder.stop();
@@ -550,228 +543,218 @@ function clearAudio() {
   elements.voiceHelp.textContent = "Tap start, speak, then tap stop.";
 }
 
-function startBrowserTranscription() {
+async function transcribeRecordedAudio(file) {
   const Recognition = speechRecognitionConstructor();
 
-  if (!Recognition) {
-    hubState.speechRecognitionShouldRun = false;
-    hubState.speechRecognitionLastError = "unsupported";
-    return false;
-  }
-
-  hubState.speechRecognitionShouldRun = true;
-  hubState.speechCommittedTranscript = elements.noteTranscript.value.trim();
-  hubState.speechRecognitionFailureCount = 0;
-  hubState.speechRecognitionLastError = "";
-  startSpeechRecognitionSession();
-  return true;
-}
-
-function startSpeechRecognitionSession() {
-  const Recognition = speechRecognitionConstructor();
-
-  if (!Recognition || !hubState.speechRecognitionShouldRun || hubState.speechRecognition) {
+  if (!Recognition || !file) {
+    elements.startRecording.disabled = false;
+    elements.voiceHelp.textContent = voiceRecordingReadyMessage("unsupported");
     return;
   }
 
-  const recognition = new Recognition();
-  let sessionFinalTranscript = "";
-  let sessionInterimTranscript = "";
+  stopPostRecordingTranscription();
+  setTranscriptionBusy(true);
+  elements.voiceHelp.textContent = "Recording ready. Creating transcript…";
 
-  recognition.lang = "en-AU";
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.addEventListener("result", function (event) {
-    if (hubState.speechRecognition !== recognition) {
-      return;
-    }
-
-    const finalParts = [];
-    const interimParts = [];
-
-    for (let index = 0; index < event.results.length; index += 1) {
-      const text = event.results[index][0].transcript.trim();
-
-      if (event.results[index].isFinal) {
-        finalParts.push(text);
-      } else {
-        interimParts.push(text);
-      }
-    }
-
-    sessionFinalTranscript = joinTranscriptParts(finalParts);
-    sessionInterimTranscript = joinTranscriptParts(interimParts);
-    elements.noteTranscript.value = joinTranscriptParts([
-      hubState.speechCommittedTranscript,
-      sessionFinalTranscript,
-      sessionInterimTranscript
-    ]);
-    elements.transcriptField.classList.remove("hidden");
-    hubState.speechRecognitionFailureCount = 0;
-    hubState.speechRecognitionLastError = "";
-    elements.voiceHelp.textContent = "Recording and creating a draft title. Tap stop when finished.";
-  });
-
-  recognition.addEventListener("start", function () {
-    if (hubState.speechRecognition === recognition) {
-      hubState.speechRecognitionRunning = true;
-      elements.voiceHelp.textContent = "Recording and listening for transcription. Tap stop when finished.";
-    }
-  });
-
-  recognition.addEventListener("error", function (event) {
-    if (hubState.speechRecognition !== recognition) {
-      return;
-    }
-
-    hubState.speechRecognitionRunning = false;
-    hubState.speechRecognitionLastError = event.error || "unknown";
-
-    if (speechRecognitionErrorIsFatal(hubState.speechRecognitionLastError)) {
-      hubState.speechRecognitionShouldRun = false;
-    } else if (hubState.speechRecognitionLastError !== "no-speech") {
-      hubState.speechRecognitionFailureCount += 1;
-
-      if (hubState.speechRecognitionFailureCount >= 3) {
-        hubState.speechRecognitionShouldRun = false;
-      }
-    }
-
-    elements.voiceHelp.textContent = transcriptionFailureMessage(hubState.speechRecognitionLastError);
-  });
-
-  recognition.addEventListener("end", function () {
-    if (hubState.speechRecognition !== recognition) {
-      return;
-    }
-
-    commitSpeechRecognitionSession(sessionFinalTranscript, sessionInterimTranscript);
-    hubState.speechRecognition = null;
-    hubState.speechRecognitionRunning = false;
-
-    if (hubState.speechRecognitionShouldRun) {
-      scheduleSpeechRecognitionRestart();
-    }
-  });
-
-  hubState.speechRecognition = recognition;
+  const existingTranscript = elements.noteTranscript.value.trim();
+  let result;
 
   try {
-    recognition.start();
-    hubState.speechRecognitionRunning = true;
+    result = await recogniseAudioTrack(file, Recognition, existingTranscript);
   } catch (_error) {
-    hubState.speechRecognition = null;
-    hubState.speechRecognitionRunning = false;
-    hubState.speechRecognitionLastError = "start-failed";
-    hubState.speechRecognitionFailureCount += 1;
-
-    if (hubState.speechRecognitionShouldRun && hubState.speechRecognitionFailureCount < 3) {
-      scheduleSpeechRecognitionRestart();
-    } else {
-      hubState.speechRecognitionShouldRun = false;
-      elements.voiceHelp.textContent = transcriptionFailureMessage("start-failed");
-    }
+    result = { transcript: "", error: "start-failed" };
+  } finally {
+    setTranscriptionBusy(false);
   }
-}
 
-function scheduleSpeechRecognitionRestart() {
-  window.clearTimeout(hubState.speechRecognitionRestartTimer);
-  hubState.speechRecognitionRestartTimer = window.setTimeout(function () {
-    hubState.speechRecognitionRestartTimer = null;
-    startSpeechRecognitionSession();
-  }, 250);
-}
-
-function commitSpeechRecognitionSession(finalTranscript, interimTranscript) {
-  const sessionTranscript = joinTranscript(finalTranscript, interimTranscript);
-
-  if (!sessionTranscript) {
+  if (result.transcript) {
+    elements.noteTranscript.value = joinTranscript(
+      existingTranscript,
+      result.transcript
+    );
+    elements.voiceHelp.textContent = "Recording and transcript ready. You can correct the wording before saving.";
     return;
   }
 
-  hubState.speechCommittedTranscript = joinTranscript(
-    hubState.speechCommittedTranscript,
-    sessionTranscript
-  );
-  elements.noteTranscript.value = hubState.speechCommittedTranscript;
-  elements.transcriptField.classList.remove("hidden");
+  elements.voiceHelp.textContent = voiceRecordingReadyMessage(result.error);
 }
 
-function stopBrowserTranscription(waitForFinalResult) {
-  hubState.speechRecognitionShouldRun = false;
-  window.clearTimeout(hubState.speechRecognitionRestartTimer);
-  hubState.speechRecognitionRestartTimer = null;
+function recogniseAudioTrack(file, Recognition, existingTranscript) {
+  return new Promise(function (resolve) {
+    const audioElement = new Audio();
+    const audioUrl = URL.createObjectURL(file);
+    const recognition = new Recognition();
+    let capturedStream = null;
+    let latestTranscript = "";
+    let lastError = "";
+    let settled = false;
+    let timeout = null;
+    let stopTimer = null;
 
-  const recognition = hubState.speechRecognition;
+    const finish = function () {
+      if (settled) {
+        return;
+      }
 
-  if (!recognition) {
-    hubState.speechRecognitionRunning = false;
-    return Promise.resolve();
-  }
+      settled = true;
+      window.clearTimeout(timeout);
+      window.clearTimeout(stopTimer);
+      audioElement.pause();
 
-  const stopMethod = waitForFinalResult ? "stop" : "abort";
-  let finish;
-  const finished = new Promise(function (resolve) {
-    finish = resolve;
+      if (capturedStream) {
+        capturedStream.getTracks().forEach(function (track) {
+          track.stop();
+        });
+      }
+
+      URL.revokeObjectURL(audioUrl);
+
+      if (hubState.speechRecognition === recognition) {
+        hubState.speechRecognition = null;
+        hubState.speechAudioElement = null;
+        hubState.speechAudioStream = null;
+      }
+
+      if (hubState.cancelAudioTranscription === cancel) {
+        hubState.cancelAudioTranscription = null;
+      }
+
+      resolve({
+        transcript: latestTranscript.trim(),
+        error: lastError
+      });
+    };
+
+    const cancel = function () {
+      try {
+        recognition.abort();
+      } catch (_error) {
+        // Recognition may not have started yet.
+      }
+
+      finish();
+    };
+    hubState.cancelAudioTranscription = cancel;
+
+    audioElement.preload = "auto";
+    audioElement.muted = true;
+    audioElement.src = audioUrl;
+
+    audioElement.addEventListener("error", function () {
+      lastError = "audio-load";
+      finish();
+    }, { once: true });
+
+    audioElement.addEventListener("canplay", function () {
+      if (settled) {
+        return;
+      }
+
+      const captureStream = audioElement.captureStream || audioElement.webkitCaptureStream;
+
+      if (!captureStream) {
+        lastError = "track-unsupported";
+        finish();
+        return;
+      }
+
+      capturedStream = captureStream.call(audioElement);
+      const audioTrack = capturedStream.getAudioTracks()[0];
+
+      if (!audioTrack || audioTrack.kind !== "audio" || audioTrack.readyState !== "live") {
+        lastError = "track-unavailable";
+        finish();
+        return;
+      }
+
+      hubState.speechRecognition = recognition;
+      hubState.speechAudioElement = audioElement;
+      hubState.speechAudioStream = capturedStream;
+
+      recognition.lang = "en-AU";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.addEventListener("result", function (event) {
+        const transcriptParts = [];
+
+        for (let index = 0; index < event.results.length; index += 1) {
+          transcriptParts.push(event.results[index][0].transcript.trim());
+        }
+
+        latestTranscript = joinTranscriptParts(transcriptParts);
+        elements.noteTranscript.value = joinTranscript(existingTranscript, latestTranscript);
+        elements.transcriptField.classList.remove("hidden");
+      });
+
+      recognition.addEventListener("error", function (event) {
+        lastError = event.error || "unknown";
+      });
+
+      recognition.addEventListener("end", finish, { once: true });
+      audioElement.addEventListener("ended", function () {
+        stopTimer = window.setTimeout(function () {
+          try {
+            recognition.stop();
+          } catch (_error) {
+            finish();
+          }
+        }, 700);
+      }, { once: true });
+
+      const durationMs = Number.isFinite(audioElement.duration)
+        ? audioElement.duration * 1000
+        : 60000;
+      timeout = window.setTimeout(function () {
+        lastError = lastError || "timeout";
+        finish();
+      }, Math.max(15000, Math.min(durationMs + 10000, 300000)));
+
+      try {
+        const playback = audioElement.play();
+        recognition.start(audioTrack);
+
+        if (playback && typeof playback.catch === "function") {
+          playback.catch(function () {
+            lastError = "playback-blocked";
+            finish();
+          });
+        }
+      } catch (_error) {
+        lastError = "start-failed";
+        finish();
+      }
+    }, { once: true });
+
+    audioElement.load();
   });
-  const settle = function () {
-    if (hubState.speechRecognition === recognition) {
-      hubState.speechRecognition = null;
-      hubState.speechRecognitionRunning = false;
-    }
+}
 
-    window.clearTimeout(timeout);
-    finish();
-  };
-  const timeout = window.setTimeout(settle, waitForFinalResult ? 900 : 0);
-
-  recognition.addEventListener("end", settle, { once: true });
-
-  try {
-    recognition[stopMethod]();
-  } catch (_error) {
-    settle();
+function stopPostRecordingTranscription() {
+  if (hubState.cancelAudioTranscription) {
+    const cancel = hubState.cancelAudioTranscription;
+    hubState.cancelAudioTranscription = null;
+    cancel();
   }
+}
 
-  if (!waitForFinalResult) {
-    hubState.speechRecognition = null;
-    hubState.speechRecognitionRunning = false;
-  }
-
-  return finished;
+function setTranscriptionBusy(isBusy) {
+  elements.startRecording.disabled = isBusy;
+  elements.removeAudio.disabled = isBusy;
+  elements.audioInput.disabled = isBusy;
+  elements.saveNoteButton.disabled = isBusy;
 }
 
 function speechRecognitionConstructor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
-function speechRecognitionErrorIsFatal(errorCode) {
-  return errorCode === "not-allowed" || errorCode === "service-not-allowed";
-}
-
-function transcriptionFailureMessage(errorCode) {
-  if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
-    return "Recording continues. Chrome blocked automatic transcription; the audio will still be saved.";
-  }
-
-  if (errorCode === "audio-capture") {
-    return "Recording continues. Chrome could not share the microphone with transcription; the audio will still be saved.";
-  }
-
-  if (errorCode === "network") {
-    return "Recording continues. The transcription connection was interrupted; the audio will still be saved.";
-  }
-
-  return "Recording continues. Automatic transcription is temporarily unavailable; the audio will still be saved.";
-}
-
-function voiceRecordingReadyMessage() {
+function voiceRecordingReadyMessage(errorCode) {
   if (elements.noteTranscript.value.trim()) {
     return "Recording and transcript ready. You can correct the wording before saving.";
   }
 
-  if (!speechRecognitionConstructor()) {
+  if (errorCode === "unsupported") {
     return "Recording ready. Automatic transcription is not supported by this browser, but the audio is safe.";
   }
 
