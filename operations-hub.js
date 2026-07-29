@@ -435,8 +435,8 @@ async function startVoiceRecording() {
     showCaptureMessage("");
 
     hubState.mediaRecorder.addEventListener("stop", finishVoiceRecording);
-    startBrowserTranscription();
     hubState.mediaRecorder.start();
+    startBrowserTranscription();
   } catch (error) {
     stopBrowserTranscription();
     stopActiveMediaStream();
