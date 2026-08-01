@@ -594,6 +594,33 @@
   width: 100%;
 }
 
+.note-media-item {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+}
+
+.attachment-delete-button {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.danger-button {
+  color: var(--red);
+}
+
+.note-utility-button.danger-button {
+  border-color: rgba(170, 68, 58, 0.24);
+}
+
 .note-actions {
   display: flex;
   flex-wrap: wrap;

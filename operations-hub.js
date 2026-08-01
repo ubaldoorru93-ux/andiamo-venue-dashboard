@@ -1082,7 +1082,7 @@ function noteCardHtml(note) {
   const category = note.category
     ? "<span>" + escapeHtml(note.category) + "</span>"
     : "";
-  const media = mediaHtml(note.note_attachments || []);
+  const media = mediaHtml(note.note_attachments || [], note.id);
   const action = actionSummaryHtml(note);
 
   return (
@@ -1121,6 +1121,9 @@ function noteCardHtml(note) {
         '">' +
         (isFollowUpFlagged(note) ? "Remove follow-up" : "Flag for follow-up") +
         "</button>" +
+        '<button class="note-utility-button danger-button" type="button" data-delete-note="' +
+        escapeHtml(note.id) +
+        '">Delete item</button>' +
       "</div>" +
       '<div class="note-actions" aria-label="Change note status">' +
         statusButtonHtml(note, "inbox", "Keep in Inbox") +
@@ -1131,32 +1134,45 @@ function noteCardHtml(note) {
   );
 }
 
-function mediaHtml(attachments) {
+function mediaHtml(attachments, noteId) {
   if (!attachments.length) {
     return "";
   }
 
   const items = attachments.map(function (attachment) {
-    if (!attachment.signed_url) {
-      return '<span class="media-error">Private attachment unavailable. Refresh to try again.</span>';
-    }
+    const mediaLabel = attachment.media_kind === "audio" ? "recording" : "photo";
+    const deleteButton = noteId
+      ? '<button class="attachment-delete-button danger-button" type="button" data-delete-attachment="' +
+        escapeHtml(attachment.id) +
+        '" data-note-id="' +
+        escapeHtml(noteId) +
+        '">Delete ' + mediaLabel + "</button>"
+      : "";
+    let preview;
 
-    if (attachment.media_kind === "photo") {
-      return (
+    if (!attachment.signed_url) {
+      preview = '<span class="media-error">Private attachment unavailable. Refresh to try again.</span>';
+    } else if (attachment.media_kind === "photo") {
+      preview =
         '<a href="' +
         escapeHtml(attachment.signed_url) +
         '" target="_blank" rel="noopener">' +
         '<img src="' +
         escapeHtml(attachment.signed_url) +
         '" alt="Improvement note photo" loading="lazy" />' +
-        "</a>"
-      );
+        "</a>";
+    } else {
+      preview =
+        '<audio controls preload="metadata" src="' +
+        escapeHtml(attachment.signed_url) +
+        '"></audio>';
     }
 
     return (
-      '<audio controls preload="metadata" src="' +
-      escapeHtml(attachment.signed_url) +
-      '"></audio>'
+      '<div class="note-media-item">' +
+        preview +
+        deleteButton +
+      "</div>"
     );
   });
 
@@ -1246,6 +1262,22 @@ function changeInboxFilter(event) {
 async function handleInboxAction(event) {
   const editButton = event.target.closest("[data-edit-title]");
   const followUpButton = event.target.closest("[data-toggle-follow-up]");
+  const deleteAttachmentButton = event.target.closest("[data-delete-attachment]");
+  const deleteNoteButton = event.target.closest("[data-delete-note]");
+
+  if (deleteAttachmentButton) {
+    await deleteAttachment(
+      deleteAttachmentButton.dataset.noteId,
+      deleteAttachmentButton.dataset.deleteAttachment,
+      deleteAttachmentButton
+    );
+    return;
+  }
+
+  if (deleteNoteButton) {
+    await deleteNote(deleteNoteButton.dataset.deleteNote, deleteNoteButton);
+    return;
+  }
 
   if (editButton) {
     await editNoteTitle(editButton.dataset.editTitle);
@@ -1296,6 +1328,141 @@ async function handleInboxAction(event) {
   renderInbox();
   renderWeeklyBrief();
   showToast("Note moved to " + statusLabel(newStatus));
+}
+
+async function deleteAttachment(noteId, attachmentId, button) {
+  const note = hubState.notes.find(function (item) {
+    return item.id === noteId;
+  });
+  const attachment = note && (note.note_attachments || []).find(function (item) {
+    return item.id === attachmentId;
+  });
+
+  if (!note || !attachment) {
+    showToast("That attachment is no longer available. Refresh the Hub.");
+    return;
+  }
+
+  const mediaLabel = attachment.media_kind === "audio" ? "recording" : "photo";
+  const removesEmptyNote =
+    (note.note_attachments || []).length === 1 &&
+    !String(note.body || "").trim() &&
+    !String(note.transcript || "").trim();
+  const confirmation = removesEmptyNote
+    ? "Permanently delete this " + mediaLabel + " and its empty Hub item? This cannot be undone."
+    : "Permanently delete this " + mediaLabel + "? The rest of the Hub item will remain.";
+
+  if (!window.confirm(confirmation)) {
+    return;
+  }
+
+  setButtonBusy(button, true, "Deleting…");
+
+  const storageResult = await supabaseClient.storage
+    .from(MEDIA_BUCKET)
+    .remove([attachment.storage_path]);
+
+  if (storageResult.error) {
+    setButtonBusy(button, false);
+    showToast("The file could not be deleted: " + friendlyError(storageResult.error));
+    return;
+  }
+
+  const databaseResult = removesEmptyNote
+    ? await supabaseClient
+      .from("improvement_notes")
+      .delete()
+      .eq("id", note.id)
+    : await supabaseClient
+      .from("note_attachments")
+      .delete()
+      .eq("id", attachment.id)
+      .eq("note_id", note.id);
+
+  if (databaseResult.error) {
+    setButtonBusy(button, false);
+    showToast("The file was removed, but the Hub entry needs a refresh: " + friendlyError(databaseResult.error));
+    return;
+  }
+
+  if (removesEmptyNote) {
+    removeNoteFromState(note.id);
+    showToast(mediaLabel === "recording"
+      ? "Recording and empty item deleted"
+      : "Photo and empty item deleted");
+    return;
+  }
+
+  note.note_attachments = (note.note_attachments || []).filter(function (item) {
+    return item.id !== attachment.id;
+  });
+  renderInbox();
+  showToast(mediaLabel === "recording" ? "Recording deleted" : "Photo deleted");
+}
+
+async function deleteNote(noteId, button) {
+  const note = hubState.notes.find(function (item) {
+    return item.id === noteId;
+  });
+
+  if (!note) {
+    showToast("That Hub item is no longer available. Refresh the Hub.");
+    return;
+  }
+
+  const attachments = note.note_attachments || [];
+  const attachmentLabel = attachments.length === 1
+    ? " and its attached file"
+    : attachments.length > 1
+      ? " and its " + attachments.length + " attached files"
+      : "";
+  const title = briefItemTitle(note);
+
+  if (!window.confirm('Permanently delete “' + title + '”' + attachmentLabel + "? This cannot be undone.")) {
+    return;
+  }
+
+  setButtonBusy(button, true, "Deleting…");
+
+  if (attachments.length) {
+    const storageResult = await supabaseClient.storage
+      .from(MEDIA_BUCKET)
+      .remove(attachments.map(function (attachment) {
+        return attachment.storage_path;
+      }));
+
+    if (storageResult.error) {
+      setButtonBusy(button, false);
+      showToast("The attached file could not be deleted: " + friendlyError(storageResult.error));
+      return;
+    }
+  }
+
+  const result = await supabaseClient
+    .from("improvement_notes")
+    .delete()
+    .eq("id", note.id);
+
+  if (result.error) {
+    setButtonBusy(button, false);
+    showToast("The files were removed, but the Hub item needs a refresh: " + friendlyError(result.error));
+    return;
+  }
+
+  removeNoteFromState(note.id);
+  showToast("Hub item deleted");
+}
+
+function removeNoteFromState(noteId) {
+  hubState.notes = hubState.notes.filter(function (note) {
+    return note.id !== noteId;
+  });
+  hubState.reviewQueue = hubState.reviewQueue.filter(function (queuedNoteId) {
+    return queuedNoteId !== noteId;
+  });
+  updateInboxCount();
+  renderInbox();
+  renderWeeklyBrief();
 }
 
 async function editNoteTitle(noteId) {
