@@ -152,7 +152,7 @@ function ensureWorker() {
     return;
   }
 
-  state.worker = new Worker("transcription-worker.js?v=2.0.1", { type: "module" });
+  state.worker = new Worker("transcription-worker.js?v=2.1.0", { type: "module" });
   state.worker.addEventListener("message", handleWorkerMessage);
   state.worker.addEventListener("error", function (event) {
     transcriptionFailed(event.message || "The local transcription worker could not start.");
@@ -175,7 +175,7 @@ function handleWorkerMessage(event) {
   if (message.status === "ready") {
     state.workerReady = true;
     elements.technical.textContent =
-      "Engine: local Whisper tiny.en · " + (message.device === "webgpu" ? "phone GPU" : "phone CPU");
+      "Engine: local Whisper base.en · " + (message.device === "webgpu" ? "phone GPU" : "phone CPU");
     runTranscription();
     return;
   }
