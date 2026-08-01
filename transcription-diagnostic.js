@@ -152,7 +152,7 @@ function ensureWorker() {
     return;
   }
 
-  state.worker = new Worker("transcription-worker.js?v=2.0.0", { type: "module" });
+  state.worker = new Worker("transcription-worker.js?v=2.0.1", { type: "module" });
   state.worker.addEventListener("message", handleWorkerMessage);
   state.worker.addEventListener("error", function (event) {
     transcriptionFailed(event.message || "The local transcription worker could not start.");
