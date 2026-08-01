@@ -6,7 +6,7 @@ import {
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
-const MODEL_ID = "onnx-community/whisper-tiny.en";
+const MODEL_ID = "onnx-community/whisper-base.en";
 let activeDevice = self.navigator?.gpu ? "webgpu" : "wasm";
 
 function modelOptions(device) {
