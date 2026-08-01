@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#163d31" />
     <title>Andiamo Operations Hub</title>
     <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="operations-hub.css?v=1.3.6" />
+    <link rel="stylesheet" href="operations-hub.css?v=1.4.0" />
   </head>
   <body>
     <div class="app-shell operations-shell">
@@ -27,7 +27,7 @@
       <main class="main-content operations-main">
         <header class="topbar operations-topbar">
           <div>
-            <p class="eyebrow">Manager improvement inbox</p>
+            <p class="eyebrow">Manager improvement inbox · v1.4.0</p>
             <h2>Restaurant Operations Hub</h2>
           </div>
           <div id="accountPanel" class="account-panel hidden">
@@ -140,6 +140,7 @@
                       <button id="startRecording" class="record-button" type="button">Start recording</button>
                       <button id="stopRecording" class="secondary-button hidden" type="button">Stop</button>
                     </div>
+                    <progress id="transcriptionProgress" class="transcription-progress hidden" max="100"></progress>
                     <label class="audio-fallback" for="audioInput">Or choose an audio file</label>
                     <input id="audioInput" class="visually-hidden" type="file" accept="audio/*" capture />
                     <div id="audioPreviewWrap" class="media-preview hidden">
@@ -151,9 +152,9 @@
                 </div>
 
                 <label id="transcriptField" class="transcript-field hidden">
-                  Transcript or extra detail
-                  <textarea id="noteTranscript" rows="3" maxlength="5000" placeholder="If your browser supports it, recognised speech will appear here. You can also add or correct a few words."></textarea>
-                  <span>Browser transcription is optional and may use your browser provider. The original recording will still be saved.</span>
+                  Private draft transcript or extra detail
+                  <textarea id="noteTranscript" rows="3" maxlength="5000" placeholder="Your private draft transcript will appear here. Check names and quantities, then correct anything needed."></textarea>
+                  <span>The draft is created on this device with local Whisper base.en. Check names and quantities before saving; the original recording is kept.</span>
                 </label>
 
                 <div class="capture-submit-row">
@@ -321,6 +322,6 @@
     <div id="hubToast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.7"></script>
-    <script src="operations-hub.js?v=1.3.6"></script>
+    <script src="operations-hub.js?v=1.4.0"></script>
   </body>
 </html>

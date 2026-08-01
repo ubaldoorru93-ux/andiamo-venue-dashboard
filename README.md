@@ -11,8 +11,9 @@ Open `operations-hub.html` for the private Manager Improvement Inbox.
 - Quick written notes and captions
 - Phone camera photo capture and private photo storage
 - Phone microphone voice recording, audio-file fallback, playback, and private audio storage
-- Optional browser live transcription while recording, with the original audio kept as the reliable fallback
-- Automatic draft titles from recognised speech when the browser supports it
+- Private on-device Whisper `base.en` draft transcription after recording or choosing an audio file
+- Editable transcripts with an Andiamo glossary pass and explicit reminders to check names and quantities
+- Automatic draft titles from the corrected transcript, with the original audio kept as the reliable fallback
 - One-tap Review Inbox flow for assigning an action to Me or Assistant, choosing an optional deadline, closing it, or keeping it in the inbox
 - Open items shown by default, Done items available through their own filter
 - Action items grouped into Mine, Assistant's, and Unassigned
@@ -23,7 +24,7 @@ Open `operations-hub.html` for the private Manager Improvement Inbox.
 
 The Supabase publishable browser key is intentionally present in `operations-hub.js`. It does not provide privileged access. Never add a Supabase secret/service-role key, database password, or transcription provider key to this public repository.
 
-Browser speech recognition is an optional convenience and is not supported consistently by every browser. Saving the recording does not depend on transcription. No paid transcription API or secret key is used.
+Transcription runs locally in the browser with Transformers.js and the browser-compatible Whisper `base.en` model. The model downloads once and is then cached where the browser permits. Saving the recording does not depend on transcription. No paid transcription API or secret key is used.
 
 ## Tip Distribution Version 1
 

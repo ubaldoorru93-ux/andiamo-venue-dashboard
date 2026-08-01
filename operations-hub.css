@@ -243,6 +243,12 @@
   gap: 7px;
 }
 
+.transcription-progress {
+  width: 100%;
+  height: 7px;
+  accent-color: var(--green);
+}
+
 .record-button {
   min-height: 38px;
   border: 1px solid rgba(170, 68, 58, 0.26);

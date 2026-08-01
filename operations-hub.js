@@ -4,6 +4,9 @@ const SUPABASE_URL = "https://qqiqcienzphskhqdnzil.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_GZ3FRa_0_36wHKyNtDCyLQ_LiEP-bMk";
 const DEFAULT_VENUE_NAME = "Andiamo Trattoria Chippendale";
 const MEDIA_BUCKET = "operations-media";
+const WHISPER_SAMPLE_RATE = 16000;
+const MAX_LOCAL_TRANSCRIPTION_SECONDS = 180;
+const LOCAL_TRANSCRIPTION_WORKER_URL = "operations-transcription-worker.js?v=1.4.0";
 
 const hubState = {
   user: null,
@@ -17,10 +20,9 @@ const hubState = {
   mediaRecorder: null,
   mediaStream: null,
   recordingChunks: [],
-  speechRecognition: null,
-  speechAudioElement: null,
-  speechAudioStream: null,
-  cancelAudioTranscription: null,
+  transcriptionWorker: null,
+  transcriptionRequest: null,
+  transcriptionRunId: 0,
   reviewQueue: [],
   reviewIndex: 0,
   reviewDue: "",
@@ -96,6 +98,7 @@ function cacheElements() {
     "audioInput",
     "audioPreviewWrap",
     "audioPreview",
+    "transcriptionProgress",
     "transcribeAudio",
     "removeAudio",
     "transcriptField",
@@ -189,6 +192,7 @@ function bindEvents() {
   });
   window.addEventListener("beforeunload", function () {
     stopPostRecordingTranscription();
+    disposeLocalTranscriptionWorker();
     stopActiveMediaStream();
   });
 }
@@ -224,6 +228,7 @@ async function handleSession(session) {
 
 function showSignedOutView() {
   stopPostRecordingTranscription();
+  disposeLocalTranscriptionWorker();
   closeRapidReview();
   hubState.user = null;
   hubState.venue = null;
@@ -490,7 +495,7 @@ function chooseRecordingMimeType() {
   }) || "";
 }
 
-function selectAudioFile(event) {
+async function selectAudioFile(event) {
   const file = event.target.files && event.target.files[0];
 
   if (!file) {
@@ -513,6 +518,7 @@ function selectAudioFile(event) {
   hubState.audioFile = file;
   showAudioPreview(file);
   elements.transcriptField.classList.remove("hidden");
+  await transcribeRecordedAudio(file);
 }
 
 function showAudioPreview(file) {
@@ -536,6 +542,8 @@ function clearAudio() {
   elements.audioPreview.removeAttribute("src");
   elements.audioPreviewWrap.classList.add("hidden");
   elements.transcribeAudio.classList.add("hidden");
+  elements.transcriptionProgress.classList.add("hidden");
+  elements.transcriptionProgress.removeAttribute("value");
   elements.transcriptField.classList.add("hidden");
   elements.noteTranscript.value = "";
   elements.startRecording.disabled = false;
@@ -555,213 +563,223 @@ async function retryAudioTranscription() {
 }
 
 async function transcribeRecordedAudio(file, userInitiated) {
-  const Recognition = speechRecognitionConstructor();
-
-  if (!Recognition || !file) {
-    elements.startRecording.disabled = false;
-    elements.transcribeAudio.classList.add("hidden");
-    elements.voiceHelp.textContent = voiceRecordingReadyMessage("unsupported");
+  if (!file) {
     return;
   }
 
   stopPostRecordingTranscription();
+  const runId = ++hubState.transcriptionRunId;
   setTranscriptionBusy(true);
   elements.transcribeAudio.classList.add("hidden");
-  elements.voiceHelp.textContent = "Recording ready. Creating transcript…";
+  elements.transcriptField.classList.remove("hidden");
+  elements.transcriptionProgress.classList.remove("hidden");
+  elements.transcriptionProgress.removeAttribute("value");
+  elements.voiceHelp.textContent = "Recording ready. Preparing private transcription on this device…";
 
   const existingTranscript = elements.noteTranscript.value.trim();
-  let result;
 
   try {
-    result = await recogniseAudioTrack(
-      file,
-      Recognition,
-      existingTranscript,
-      Boolean(userInitiated)
-    );
-  } catch (_error) {
-    result = { transcript: "", error: "start-failed" };
-  } finally {
-    setTranscriptionBusy(false);
-  }
+    const audio = await decodeAudioForLocalTranscription(file);
+    const durationSeconds = audio.length / WHISPER_SAMPLE_RATE;
 
-  if (result.transcript) {
-    elements.noteTranscript.value = joinTranscript(
-      existingTranscript,
-      result.transcript
-    );
-    elements.voiceHelp.textContent = "Recording and transcript ready. You can correct the wording before saving.";
+    if (!audio.length) {
+      throw new Error("The recording contained no readable audio samples.");
+    }
+
+    if (durationSeconds > MAX_LOCAL_TRANSCRIPTION_SECONDS) {
+      throw new Error("Private transcription currently supports recordings up to 3 minutes.");
+    }
+
+    if (runId !== hubState.transcriptionRunId) {
+      return;
+    }
+
+    const result = await requestLocalTranscription(audio, runId);
+    const draft = applyAndiamoVocabulary(String(result.text || "").trim());
+
+    if (!draft) {
+      throw new Error("The local model returned an empty transcript.");
+    }
+
+    elements.noteTranscript.value = joinTranscript(existingTranscript, draft);
+    elements.voiceHelp.textContent =
+      "Draft transcript ready in " +
+      Number(result.seconds || 0).toFixed(1) +
+      " seconds. Check names and quantities before saving.";
     elements.transcribeAudio.classList.add("hidden");
-    return;
-  }
+  } catch (error) {
+    if (runId !== hubState.transcriptionRunId || error?.code === "transcription-cancelled") {
+      return;
+    }
 
-  elements.transcribeAudio.classList.remove("hidden");
-  elements.voiceHelp.textContent = voiceRecordingReadyMessage(result.error);
+    elements.transcribeAudio.classList.remove("hidden");
+    elements.voiceHelp.textContent = localTranscriptionFailureMessage(error, Boolean(userInitiated));
+  } finally {
+    if (runId === hubState.transcriptionRunId) {
+      setTranscriptionBusy(false);
+      elements.transcriptionProgress.classList.add("hidden");
+      elements.transcriptionProgress.removeAttribute("value");
+    }
+  }
 }
 
-function recogniseAudioTrack(file, Recognition, existingTranscript, userInitiated) {
-  return new Promise(function (resolve) {
-    const audioElement = new Audio();
-    const audioUrl = URL.createObjectURL(file);
-    const recognition = new Recognition();
-    let capturedStream = null;
-    let latestTranscript = "";
-    let lastError = "";
-    let settled = false;
-    let timeout = null;
-    let stopTimer = null;
+async function decodeAudioForLocalTranscription(file) {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
 
-    const finish = function () {
-      if (settled) {
-        return;
-      }
+  if (!AudioContext) {
+    throw new Error("This browser cannot decode the saved recording.");
+  }
 
-      settled = true;
-      window.clearTimeout(timeout);
-      window.clearTimeout(stopTimer);
-      audioElement.pause();
+  const context = new AudioContext();
 
-      if (capturedStream) {
-        capturedStream.getTracks().forEach(function (track) {
-          track.stop();
-        });
-      }
+  try {
+    const buffer = await context.decodeAudioData(await file.arrayBuffer());
+    const mono = mixAudioToMono(buffer);
+    return buffer.sampleRate === WHISPER_SAMPLE_RATE
+      ? mono
+      : resampleAudioLinear(mono, buffer.sampleRate, WHISPER_SAMPLE_RATE);
+  } finally {
+    await context.close();
+  }
+}
 
-      URL.revokeObjectURL(audioUrl);
+function mixAudioToMono(buffer) {
+  if (buffer.numberOfChannels === 1) {
+    return new Float32Array(buffer.getChannelData(0));
+  }
 
-      if (hubState.speechRecognition === recognition) {
-        hubState.speechRecognition = null;
-        hubState.speechAudioElement = null;
-        hubState.speechAudioStream = null;
-      }
+  const mono = new Float32Array(buffer.length);
 
-      if (hubState.cancelAudioTranscription === cancel) {
-        hubState.cancelAudioTranscription = null;
-      }
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const samples = buffer.getChannelData(channel);
+    for (let index = 0; index < samples.length; index += 1) {
+      mono[index] += samples[index] / buffer.numberOfChannels;
+    }
+  }
 
-      resolve({
-        transcript: latestTranscript.trim(),
-        error: lastError
-      });
-    };
+  return mono;
+}
 
-    const cancel = function () {
-      try {
-        recognition.abort();
-      } catch (_error) {
-        // Recognition may not have started yet.
-      }
+function resampleAudioLinear(samples, fromRate, toRate) {
+  const outputLength = Math.max(1, Math.round(samples.length * toRate / fromRate));
+  const output = new Float32Array(outputLength);
+  const ratio = fromRate / toRate;
 
-      finish();
-    };
-    hubState.cancelAudioTranscription = cancel;
+  for (let index = 0; index < outputLength; index += 1) {
+    const sourceIndex = index * ratio;
+    const leftIndex = Math.floor(sourceIndex);
+    const rightIndex = Math.min(leftIndex + 1, samples.length - 1);
+    const weight = sourceIndex - leftIndex;
+    output[index] = samples[leftIndex] * (1 - weight) + samples[rightIndex] * weight;
+  }
 
-    audioElement.preload = "auto";
-    audioElement.muted = !userInitiated;
-    audioElement.src = audioUrl;
+  return output;
+}
 
-    audioElement.addEventListener("error", function () {
-      lastError = "audio-load";
-      finish();
-    }, { once: true });
+function requestLocalTranscription(audio, runId) {
+  ensureLocalTranscriptionWorker();
 
-    audioElement.addEventListener("canplay", function () {
-      if (settled) {
-        return;
-      }
-
-      const captureStream = audioElement.captureStream || audioElement.webkitCaptureStream;
-
-      if (!captureStream) {
-        lastError = "track-unsupported";
-        finish();
-        return;
-      }
-
-      capturedStream = captureStream.call(audioElement);
-      const audioTrack = capturedStream.getAudioTracks()[0];
-
-      if (!audioTrack || audioTrack.kind !== "audio" || audioTrack.readyState !== "live") {
-        lastError = "track-unavailable";
-        finish();
-        return;
-      }
-
-      hubState.speechRecognition = recognition;
-      hubState.speechAudioElement = audioElement;
-      hubState.speechAudioStream = capturedStream;
-
-      recognition.lang = "en-AU";
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.addEventListener("result", function (event) {
-        const transcriptParts = [];
-
-        for (let index = 0; index < event.results.length; index += 1) {
-          transcriptParts.push(event.results[index][0].transcript.trim());
-        }
-
-        latestTranscript = joinTranscriptParts(transcriptParts);
-        elements.noteTranscript.value = joinTranscript(existingTranscript, latestTranscript);
-        elements.transcriptField.classList.remove("hidden");
-      });
-
-      recognition.addEventListener("error", function (event) {
-        lastError = event.error || "unknown";
-      });
-
-      recognition.addEventListener("end", finish, { once: true });
-      recognition.addEventListener("speechend", function () {
-        try {
-          recognition.stop();
-        } catch (_error) {
-          finish();
-        }
-      }, { once: true });
-      audioElement.addEventListener("ended", function () {
-        stopTimer = window.setTimeout(function () {
-          try {
-            recognition.stop();
-          } catch (_error) {
-            finish();
-          }
-        }, 700);
-      }, { once: true });
-
-      const durationMs = Number.isFinite(audioElement.duration)
-        ? audioElement.duration * 1000
-        : 60000;
-      timeout = window.setTimeout(function () {
-        lastError = lastError || "timeout";
-        finish();
-      }, Math.max(15000, Math.min(durationMs + 10000, 300000)));
-
-      try {
-        const playback = audioElement.play();
-        recognition.start(audioTrack);
-
-        if (playback && typeof playback.catch === "function") {
-          playback.catch(function () {
-            lastError = "playback-blocked";
-            finish();
-          });
-        }
-      } catch (_error) {
-        lastError = "start-failed";
-        finish();
-      }
-    }, { once: true });
-
-    audioElement.load();
+  return new Promise(function (resolve, reject) {
+    hubState.transcriptionRequest = { runId, resolve, reject };
+    hubState.transcriptionWorker.postMessage(
+      { type: "transcribe", audio, requestId: runId },
+      [audio.buffer]
+    );
   });
 }
 
+function ensureLocalTranscriptionWorker() {
+  if (hubState.transcriptionWorker) {
+    return;
+  }
+
+  const worker = new Worker(LOCAL_TRANSCRIPTION_WORKER_URL, { type: "module" });
+  worker.addEventListener("message", handleLocalTranscriptionMessage);
+  worker.addEventListener("error", function (event) {
+    rejectLocalTranscription(event.message || "The private transcription engine could not start.");
+    disposeLocalTranscriptionWorker();
+  });
+  hubState.transcriptionWorker = worker;
+}
+
+function handleLocalTranscriptionMessage(event) {
+  const message = event.data || {};
+  const request = hubState.transcriptionRequest;
+
+  if (message.requestId && message.requestId !== request?.runId) {
+    return;
+  }
+
+  if (message.status === "loading") {
+    elements.voiceHelp.textContent = message.message || "Loading private transcription…";
+    return;
+  }
+
+  if (message.status === "progress") {
+    const progress = Number(message.progress);
+
+    if (Number.isFinite(progress)) {
+      elements.transcriptionProgress.value = Math.max(0, Math.min(100, progress));
+      elements.voiceHelp.textContent = "Downloading the private model… " + Math.round(progress) + "%";
+    } else {
+      elements.transcriptionProgress.removeAttribute("value");
+    }
+    return;
+  }
+
+  if (message.status === "ready") {
+    elements.transcriptionProgress.removeAttribute("value");
+    elements.voiceHelp.textContent =
+      "Private model ready on the phone’s " +
+      (message.device === "webgpu" ? "GPU" : "CPU") +
+      ". Creating the draft transcript…";
+    return;
+  }
+
+  if (message.status === "transcribing") {
+    elements.transcriptionProgress.removeAttribute("value");
+    elements.voiceHelp.textContent = "Creating the draft transcript privately on this device…";
+    return;
+  }
+
+  if (message.status === "complete" && request) {
+    hubState.transcriptionRequest = null;
+    request.resolve(message);
+    return;
+  }
+
+  if (message.status === "error") {
+    rejectLocalTranscription(message.message || "The private transcription engine failed.");
+  }
+}
+
+function rejectLocalTranscription(message) {
+  const request = hubState.transcriptionRequest;
+
+  if (!request) {
+    return;
+  }
+
+  hubState.transcriptionRequest = null;
+  request.reject(new Error(message));
+}
+
 function stopPostRecordingTranscription() {
-  if (hubState.cancelAudioTranscription) {
-    const cancel = hubState.cancelAudioTranscription;
-    hubState.cancelAudioTranscription = null;
-    cancel();
+  hubState.transcriptionRunId += 1;
+
+  if (hubState.transcriptionRequest) {
+    const request = hubState.transcriptionRequest;
+    const error = new Error("Transcription cancelled.");
+    error.code = "transcription-cancelled";
+    hubState.transcriptionRequest = null;
+    request.reject(error);
+  }
+}
+
+function disposeLocalTranscriptionWorker() {
+  if (hubState.transcriptionWorker) {
+    hubState.transcriptionWorker.terminate();
+    hubState.transcriptionWorker = null;
   }
 }
 
@@ -773,45 +791,38 @@ function setTranscriptionBusy(isBusy) {
   elements.transcribeAudio.disabled = isBusy;
 }
 
-function speechRecognitionConstructor() {
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+function localTranscriptionFailureMessage(error, userInitiated) {
+  const detail = error?.message || "no transcript was returned";
+  const retryHint = userInitiated ? "Try once more" : "Tap “Try transcription again”";
+  return "Recording ready, but the private draft could not be created: " + detail + ". " + retryHint + "; the audio is safe.";
 }
 
-function voiceRecordingReadyMessage(errorCode) {
-  if (elements.noteTranscript.value.trim()) {
-    return "Recording and transcript ready. You can correct the wording before saving.";
-  }
+function applyAndiamoVocabulary(text) {
+  const corrections = [
+    [/\bcarbon diagram\b/gi, "carbonara"],
+    [/\bparmesan(?: cheese)?\b/gi, "Parmigiano"],
+    [/\bparmigiano\b/gi, "Parmigiano"],
+    [/\bandiamo\b/gi, "Andiamo"],
+    [/\bveolia\b/gi, "Veolia"],
+    [/\bpurezza\b/gi, "Purezza"],
+    [/\bsupagas\b/gi, "Supagas"],
+    [/\bsevenrooms\b/gi, "SevenRooms"],
+    [/\bdeliverit\b/gi, "Deliverit"],
+    [/\bdomenico\b/gi, "Domenico"],
+    [/\bbishal\b/gi, "Bishal"],
+    [/\bvuk\b/gi, "Vuk"],
+    [/\bjohnny\b/gi, "Johnny"],
+    [/\bpierre\b/gi, "Pierre"],
+    [/\bvalerie\b/gi, "Valerie"]
+  ];
 
-  if (errorCode === "unsupported") {
-    return "Recording ready. Automatic transcription is not supported by this browser, but the audio is safe.";
-  }
-
-  const errorLabels = {
-    "not-allowed": "permission was denied",
-    "service-not-allowed": "the speech service was unavailable",
-    "audio-capture": "the saved audio track could not be read",
-    "audio-load": "the recording could not be loaded",
-    "track-unsupported": "audio-track transcription is unsupported",
-    "track-unavailable": "the saved audio track was unavailable",
-    "playback-blocked": "Chrome blocked the recording replay",
-    "network": "the speech service could not connect",
-    "no-speech": "no speech was detected",
-    "aborted": "transcription was interrupted",
-    "timeout": "transcription timed out",
-    "start-failed": "transcription could not start",
-    "unknown": "an unknown speech error occurred"
-  };
-  const detail = errorLabels[errorCode] || "no speech result was returned";
-
-  return "Recording ready, but " + detail + ". Tap “Try transcription again”; Chrome may briefly replay the recording. The audio is safe.";
+  return corrections.reduce(function (draft, correction) {
+    return draft.replace(correction[0], correction[1]);
+  }, text).replace(/\s+/g, " ").trim();
 }
 
 function joinTranscript(first, second) {
   return [first, second].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-}
-
-function joinTranscriptParts(parts) {
-  return parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
 function clearAudioPreviewUrl() {

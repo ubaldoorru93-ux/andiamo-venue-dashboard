@@ -1,5 +1,37 @@
 # Project Log
 
+## 2026-08-01 - Operations Hub Local Transcription v1.4.0
+
+### Project
+
+Replaced the unreliable saved-audio Chrome speech-recognition experiment with the `base.en` local Whisper configuration proven on the Samsung Galaxy Z Fold 6 diagnostic page.
+
+### Decisions
+
+- Keep authentication, Supabase storage, note saving, inbox rendering, summaries, and v1.3.6 deletion behaviour unchanged.
+- Run transcription on the user's device with no API key, card, or recurring transcription cost.
+- Use `base.en` because it was substantially faster than `small.en` on the test phone without a clear accuracy disadvantage.
+- Treat every transcript as an editable draft and explicitly require a quick check of names and quantities.
+- Apply only conservative Andiamo glossary corrections after transcription rather than claiming the model is perfectly accurate.
+- Keep the original recording as the reliable source and allow saving even when transcription fails.
+
+### Changes Made
+
+- Added a dedicated `operations-transcription-worker.js` using browser-cached Whisper `base.en`, WebGPU with automatic CPU fallback, and 30-second overlapping chunks for recordings up to three minutes.
+- Automatically transcribe both freshly recorded voice notes and chosen audio files.
+- Added visible model download progress and clear preparation, processing, success, and retry states.
+- Added an editable private draft transcript field and an Andiamo glossary pass for known venue, supplier, platform, food, and staff terms.
+- Removed the old Chrome replay/captured-track speech-recognition path.
+- Updated Hub cache versions and visible version label to v1.4.0.
+
+### Validation Completed
+
+- `node --check` passed for the Hub script and local transcription worker.
+- `git diff --check` passed.
+- Static DOM wiring confirmed every cached Hub element exists, including the new transcription progress element.
+- Function checks passed for audio resampling, glossary corrections, and preservation of note/attachment deletion handlers.
+- Real phone validation is still required after publishing.
+
 ## 2026-07-21 - Operations Hub Secure Foundation
 
 ### Project
