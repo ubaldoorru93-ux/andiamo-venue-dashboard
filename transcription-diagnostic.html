@@ -181,7 +181,7 @@
   </head>
   <body>
     <main>
-      <p class="eyebrow">Operations Hub diagnostic v2.0.1</p>
+      <p class="eyebrow">Operations Hub diagnostic v2.1.0 · base.en</p>
       <h1>Private local transcription test</h1>
       <p class="intro">
         This test replaces Chrome speech recognition with a small AI model that runs on this device.
@@ -202,8 +202,8 @@
       <section id="transcriptionCard" class="card hidden">
         <h2>2. Create the transcript on this device</h2>
         <p>
-          The first test downloads the transcription model. Keep this page open; later attempts should
-          reuse the cached model.
+          The first test downloads the larger, more accurate base.en model. Keep this page open; later
+          attempts should reuse the cached model.
         </p>
         <button id="transcribeButton" type="button">Create local transcript</button>
         <progress id="modelProgress" class="hidden" max="100" value="0"></progress>
@@ -218,6 +218,6 @@
       </p>
     </main>
 
-    <script type="module" src="transcription-diagnostic.js?v=2.0.1"></script>
+    <script type="module" src="transcription-diagnostic.js?v=2.1.0"></script>
   </body>
 </html>
