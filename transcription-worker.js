@@ -92,8 +92,6 @@ async function transcribe(audio) {
   self.postMessage({ status: "transcribing" });
 
   const output = await transcriber(audio, {
-    language: "en",
-    task: "transcribe",
     chunk_length_s: 30,
     stride_length_s: 5
   });
