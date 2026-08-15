@@ -551,10 +551,15 @@
 
 .rule-row {
   align-items: flex-end;
+  flex-wrap: wrap;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: #fffdf7;
+}
+
+.rule-row > div:first-child {
+  flex: 1 1 100%;
 }
 
 .rule-row strong {

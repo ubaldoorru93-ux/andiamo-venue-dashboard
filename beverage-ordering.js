@@ -13,6 +13,7 @@
   let saveQueued = false;
   let appEventsBound = false;
   let locations = [];
+  let catalog = [];
   let products = [];
   let sales = [];
   let supplierDefaults = {};
@@ -192,7 +193,8 @@
     supplierDefaults = payload.supplierDefaults || {};
     recipes = payload.recipes || [];
     sales = payload.drinkSales || [];
-    products = payload.catalog.map((product) => ({ ...product, id: product.id || `stock-${product.row}` }));
+    catalog = payload.catalog.map((product) => ({ ...product, id: product.id || `stock-${product.row}` }));
+    products = catalog.filter((product) => product.active !== false);
     byName = new Map(products.map((product) => [product.item.toLowerCase(), product]));
     categoryOptions = ["All categories", ...new Set(products.map((product) => product.category))];
     state = {
@@ -216,7 +218,7 @@
     return {
       version: 1,
       venue: currentVenue?.name || "Andiamo Trattoria Chippendale",
-      catalog: products.map(({ id: _id, ...product }) => product),
+      catalog: catalog.map(({ id: _id, ...product }) => product),
       drinkSales: sales,
       locations,
       supplierDefaults,
@@ -259,6 +261,7 @@
     currentVenue = null;
     privateRecordId = null;
     state = null;
+    catalog = [];
     products = [];
     document.getElementById("authGate").classList.remove("hidden");
     document.getElementById("privateSetupGate").classList.add("hidden");
@@ -509,14 +512,22 @@
   }
 
   function supplierStatus(supplier, items) {
-    const rule = state.supplierRules[supplier] || { minDollar: 0, minUnits: 0, delivery: "Confirm delivery window", note: "No protected supplier rule is recorded yet." };
+    const rule = state.supplierRules[supplier] || { minDollar: 0, minUnits: 0, minCases: 0, delivery: "Confirm delivery window", note: "No protected supplier rule is recorded yet." };
     const value = items.reduce((sum, item) => sum + item.order.value, 0);
     const units = items.reduce((sum, item) => sum + item.order.units, 0);
+    const cases = items.reduce((sum, item) => sum + item.order.cases, 0);
     const dollarShort = Math.max(0, numberOr(rule.minDollar, 0) - value);
     const unitShort = Math.max(0, numberOr(rule.minUnits, 0) - units);
-    const ok = dollarShort === 0 && unitShort === 0;
-    const message = dollarShort > 0 ? `${currency(dollarShort)} below minimum` : unitShort > 0 ? `${decimal(unitShort)} bottles below rule` : "Rule met";
-    return { rule, value, units, ok, message };
+    const caseShort = Math.max(0, numberOr(rule.minCases, 0) - cases);
+    const ok = dollarShort === 0 && unitShort === 0 && caseShort === 0;
+    const message = dollarShort > 0
+      ? `${currency(dollarShort)} below minimum`
+      : caseShort > 0
+        ? `${decimal(caseShort)} cases below minimum`
+        : unitShort > 0
+          ? `${decimal(unitShort)} bottles below rule`
+          : "Rule met";
+    return { rule, value, units, cases, ok, message };
   }
 
   function renderOrders() {
@@ -646,7 +657,8 @@
     container.innerHTML = suppliers.map((supplier) => {
       const rule = state.supplierRules[supplier];
       return `<div class="rule-row"><div><strong>${escapeHtml(supplier)}</strong><span class="product-meta">${escapeHtml(rule.note || "")}</span></div>
-        <label><span>Min. order $</span><input class="rule-input working-input" data-supplier-min="${escapeHtml(supplier)}" type="number" min="0" step="1" value="${numberOr(rule.minDollar, 0)}" /></label></div>`;
+        <label><span>Min. order $</span><input class="rule-input working-input" data-supplier-min="${escapeHtml(supplier)}" type="number" min="0" step="1" value="${numberOr(rule.minDollar, 0)}" /></label>
+        <label><span>Min. cases</span><input class="rule-input working-input" data-supplier-cases="${escapeHtml(supplier)}" type="number" min="0" step="1" value="${numberOr(rule.minCases, 0)}" /></label></div>`;
     }).join("");
     container.querySelectorAll("[data-supplier-min]").forEach((input) => input.addEventListener("change", () => {
       state.supplierRules[input.dataset.supplierMin].minDollar = Math.max(0, numberOr(input.value, 0));
@@ -654,6 +666,13 @@
       renderOrders();
       renderKpis();
       showToast("Supplier rule updated.");
+    }));
+    container.querySelectorAll("[data-supplier-cases]").forEach((input) => input.addEventListener("change", () => {
+      state.supplierRules[input.dataset.supplierCases].minCases = Math.max(0, numberOr(input.value, 0));
+      saveState();
+      renderOrders();
+      renderKpis();
+      showToast("Supplier case minimum updated.");
     }));
   }
 
