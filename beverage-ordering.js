@@ -371,7 +371,7 @@
   function recommendation(product) {
     const settings = overrideFor(product);
     const onHand = totalOnHand(product);
-    const gap = Math.max(0, settings.par - onHand - settings.onOrder);
+    const gap = product.orderable === false ? 0 : Math.max(0, settings.par - onHand - settings.onOrder);
     const pack = Math.max(1, settings.unitsPerCase);
     const units = gap > 0 ? Math.ceil(gap / pack) * pack : 0;
     return { ...settings, onHand, gap, units, cases: units / pack, value: units * settings.unitCost };
@@ -441,8 +441,11 @@
     const body = document.getElementById("countTableBody");
     body.innerHTML = rows.length ? rows.map((product) => {
       const value = countValue(product);
+      const stockMeta = product.orderable === false
+        ? `${product.category} · ${product.size || "unit"} · hold stock / no reorder · default ${decimal(product.defaultQuantity ?? product.latestCount)}`
+        : `${product.category} · ${product.size || "unit"}`;
       return `<tr>
-        <td><span class="product-name">${escapeHtml(product.item)}</span><span class="product-meta">${escapeHtml(product.category)} · ${escapeHtml(product.size || "unit")}</span></td>
+        <td><span class="product-name">${escapeHtml(product.item)}</span><span class="product-meta">${escapeHtml(stockMeta)}</span></td>
         <td>${escapeHtml(overrideFor(product).supplier)}</td>
         <td>${decimal(overrideFor(product).unitsPerCase)}</td>
         <td class="numeric">${decimal(product.latestCount)}</td>
@@ -503,6 +506,7 @@
   function supplierOrderGroups() {
     const groups = new Map();
     products.forEach((product) => {
+      if (product.orderable === false) return;
       const order = recommendation(product);
       if (!order.units) return;
       if (!groups.has(order.supplier)) groups.set(order.supplier, []);
@@ -692,7 +696,7 @@
     body.innerHTML = filteredSetupProducts().map((product) => {
       const settings = overrideFor(product);
       return `<tr>
-        <td><span class="product-name">${escapeHtml(product.item)}</span><span class="product-meta">${escapeHtml(product.category)} · last ${decimal(product.latestCount)}</span></td>
+        <td><span class="product-name">${escapeHtml(product.item)}</span><span class="product-meta">${escapeHtml(product.category)} · last ${decimal(product.latestCount)}${product.orderable === false ? " · hold stock / no reorder" : ""}</span></td>
         <td><select class="table-input working-input" data-field="supplier" data-product="${product.id}">${suppliers.map((supplier) => `<option ${supplier === settings.supplier ? "selected" : ""}>${escapeHtml(supplier)}</option>`).join("")}</select></td>
         <td>${escapeHtml(product.size || "—")}</td>
         <td><input class="table-input working-input numeric" data-field="unitsPerCase" data-product="${product.id}" type="number" min="1" step="1" value="${settings.unitsPerCase}" /></td>
