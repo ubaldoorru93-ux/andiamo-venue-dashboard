@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#173d31" />
+    <title>Andiamo Beverage Stock & Ordering</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="beverage-ordering.css" />
+  </head>
+  <body>
+    <div class="app-shell beverage-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <img class="brand-logo" src="assets/andiamo-logo.svg" alt="Andiamo Trattoria Chippendale" />
+        </div>
+        <nav class="nav-list">
+          <a class="nav-item" href="index.html">Tip Distribution</a>
+          <a class="nav-item" href="operations-hub.html">Operations Hub 🔒</a>
+          <a class="nav-item" href="labour-planner.html">Labour Check 🔒</a>
+          <a class="nav-item active" href="beverage-ordering.html">Beverage Ordering</a>
+        </nav>
+        <div class="sidebar-note">
+          <span>Order rhythm</span>
+          <strong>Count → Review → Draft</strong>
+          <small>Monday ordering</small>
+        </div>
+      </aside>
+
+      <main class="beverage-main">
+        <header class="bev-topbar">
+          <div>
+            <p class="eyebrow">Andiamo Chippendale</p>
+            <h1>Beverage stock & ordering</h1>
+            <p class="subtle">One fast count, one clear order list.</p>
+          </div>
+          <div class="top-actions">
+            <span id="saveStatus" class="save-status hidden">Saved securely</span>
+            <div id="accountPanel" class="account-panel hidden">
+              <span id="accountEmail"></span>
+              <button id="signOutButton" class="secondary-button" type="button">Sign out</button>
+            </div>
+          </div>
+        </header>
+
+        <section id="authGate" class="workspace-panel secure-gate active" aria-labelledby="loginHeading">
+          <div class="auth-lock" aria-hidden="true">🔒</div>
+          <div>
+            <p class="eyebrow">Private beverage workspace</p>
+            <h2 id="loginHeading">Sign in to continue</h2>
+            <p class="subtle">Only an existing authorised venue account can load the product catalogue, supplier prices, counts and orders.</p>
+          </div>
+          <form id="loginForm" class="secure-login-form">
+            <label for="loginEmail">Authorised email address</label>
+            <div class="secure-login-row">
+              <input id="loginEmail" type="email" autocomplete="email" required placeholder="manager email" />
+              <button id="sendLoginLink" class="primary-button" type="submit">Send secure link</button>
+            </div>
+            <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section id="privateSetupGate" class="workspace-panel secure-gate hidden" aria-labelledby="setupHeading">
+          <div class="auth-lock" aria-hidden="true">✓</div>
+          <div>
+            <p class="eyebrow">Signed in securely</p>
+            <h2 id="setupHeading">Import the private beverage setup once</h2>
+            <p class="subtle">Choose the private setup file supplied with this version. It will be saved behind the same venue security as the Operations Hub and will not be added to the public website.</p>
+          </div>
+          <div class="secure-login-form">
+            <label for="privateSetupFile">Private setup file</label>
+            <div class="secure-login-row">
+              <input id="privateSetupFile" type="file" accept="application/json,.json" />
+              <button id="importPrivateSetup" class="primary-button" type="button">Import securely</button>
+            </div>
+            <p id="setupMessage" class="auth-message" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <div id="beverageApp" class="hidden">
+        <div class="private-actions">
+          <button id="backupButton" class="secondary-button" type="button">Private backup</button>
+          <button id="restoreButton" class="secondary-button" type="button">Restore backup</button>
+          <input id="restoreFile" class="hidden" type="file" accept="application/json,.json" />
+          <button id="newCountButton" class="primary-button" type="button">Start new count</button>
+        </div>
+
+        <section class="kpi-grid" aria-label="Stock overview">
+          <article class="kpi-card">
+            <span>Count progress</span>
+            <strong id="countProgress">0%</strong>
+            <small id="countProgressDetail">No count started</small>
+          </article>
+          <article class="kpi-card">
+            <span>Stock value</span>
+            <strong id="stockValue">$0</strong>
+            <small>Counted stock or latest reference</small>
+          </article>
+          <article class="kpi-card order-card">
+            <span>Recommended order</span>
+            <strong id="orderValue">$0</strong>
+            <small id="orderLineCount">0 product lines</small>
+          </article>
+          <article class="kpi-card alert-card">
+            <span>Supplier checks</span>
+            <strong id="supplierAlertCount">0</strong>
+            <small>Minimums or rules to review</small>
+          </article>
+        </section>
+
+        <nav class="workspace-tabs" aria-label="Beverage workspace">
+          <button class="workspace-tab active" data-tab="count" type="button">1. Count stock</button>
+          <button class="workspace-tab" data-tab="orders" type="button">2. Review orders</button>
+          <button class="workspace-tab" data-tab="recipes" type="button">Recipe demand</button>
+          <button class="workspace-tab" data-tab="setup" type="button">Products & rules</button>
+        </nav>
+
+        <section id="countTab" class="workspace-panel active" data-panel="count">
+          <div class="panel-heading count-heading">
+            <div>
+              <p class="eyebrow">Physical route</p>
+              <h2 id="activeLocationTitle">Wine display</h2>
+              <p id="activeLocationHelp" class="subtle">Enter what is physically in this area. Open bottles can be decimals.</p>
+            </div>
+            <div class="location-actions">
+              <button id="previousLocation" class="secondary-button" type="button">Previous</button>
+              <button id="finishLocation" class="primary-button" type="button">Finish this area</button>
+              <button id="nextLocation" class="secondary-button" type="button">Next</button>
+            </div>
+          </div>
+
+          <div id="locationStepper" class="location-stepper" aria-label="Stocktake locations"></div>
+
+          <div class="filter-bar">
+            <label class="search-field">
+              <span>Find product</span>
+              <input id="countSearch" type="search" placeholder="Wine, beer, milk, syrup…" autocomplete="off" />
+            </label>
+            <label>
+              <span>Category</span>
+              <select id="countCategory"></select>
+            </label>
+            <label>
+              <span>Show</span>
+              <select id="countStatus">
+                <option value="all">All products</option>
+                <option value="entered">Entered here</option>
+                <option value="missing">Not entered here</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="table-shell count-table-shell">
+            <table class="bev-table count-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Supplier</th>
+                  <th>Pack</th>
+                  <th>Last count</th>
+                  <th class="numeric">Qty in this area</th>
+                </tr>
+              </thead>
+              <tbody id="countTableBody"></tbody>
+            </table>
+          </div>
+          <div class="mobile-sticky-action">
+            <button id="mobileFinishLocation" class="primary-button" type="button">Finish this area</button>
+          </div>
+        </section>
+
+        <section id="ordersTab" class="workspace-panel" data-panel="orders">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Monday order review</p>
+              <h2>Recommendations by supplier</h2>
+              <p class="subtle">Recommendations top stock up to the editable working par and round to order packs.</p>
+            </div>
+            <button id="copyAllOrders" class="primary-button" type="button">Copy all order drafts</button>
+          </div>
+          <div id="orderModeNotice" class="order-mode-notice"></div>
+          <div id="supplierOrders" class="supplier-orders"></div>
+        </section>
+
+        <section id="recipesTab" class="workspace-panel" data-panel="recipes">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Sales translated into ingredients</p>
+              <h2>Cocktail & mocktail demand</h2>
+              <p class="subtle">Uses the recipe cards and the June–July weekly sales averages. This is a check on the provisional pars, not yet an automatic override.</p>
+            </div>
+          </div>
+          <div class="recipe-summary" id="recipeSummary"></div>
+          <div class="table-shell">
+            <table class="bev-table">
+              <thead>
+                <tr>
+                  <th>Ingredient / stock item</th>
+                  <th class="numeric">Weekly use</th>
+                  <th class="numeric">1.5-week cover</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="recipeDemandBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="setupTab" class="workspace-panel" data-panel="setup">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Editable assumptions</p>
+              <h2>Products & supplier rules</h2>
+              <p class="subtle">Yellow fields are working assumptions. Correct them here once and future counts will remember them.</p>
+            </div>
+            <button id="resetAssumptions" class="secondary-button danger-button" type="button">Reset assumptions</button>
+          </div>
+
+          <h3 class="section-title">Supplier rules</h3>
+          <div id="supplierRules" class="supplier-rule-grid"></div>
+
+          <div class="filter-bar setup-filter-bar">
+            <label class="search-field">
+              <span>Find product</span>
+              <input id="setupSearch" type="search" placeholder="Search all products…" autocomplete="off" />
+            </label>
+            <label>
+              <span>Supplier</span>
+              <select id="setupSupplier"></select>
+            </label>
+          </div>
+
+          <div class="table-shell">
+            <table class="bev-table setup-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Supplier</th>
+                  <th>Size</th>
+                  <th class="numeric">Pack</th>
+                  <th class="numeric">Unit cost</th>
+                  <th class="numeric">Working par</th>
+                  <th class="numeric">On order</th>
+                </tr>
+              </thead>
+              <tbody id="setupTableBody"></tbody>
+            </table>
+          </div>
+
+          <details class="method-note">
+            <summary>What is already loaded?</summary>
+            <p>Your private product catalogue, costs, working pars, supplier rules and recipe-demand assumptions are loaded only after secure sign-in. Order quantities are shown in individual units and rounded to each protected product’s recorded case pack.</p>
+          </details>
+        </section>
+        </div>
+
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.7"></script>
+    <script src="beverage-ordering.js?v=2.0.0"></script>
+  </body>
+</html>
