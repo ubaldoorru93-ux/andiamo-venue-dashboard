@@ -40,6 +40,7 @@ const elements = {
   clearCurrentWeek: document.querySelector("#clearCurrentWeek"),
   weekStart: document.querySelector("#weekStart"),
   startSelectWeek: document.querySelector("#startSelectWeek"),
+  sheetDays: document.querySelector("#sheetDays"),
   dailyTipsBody: document.querySelector("#dailyTipsBody"),
   dailyTipsNotice: document.querySelector("#dailyTipsNotice"),
   dailyTipsReviewed: document.querySelector("#dailyTipsReviewed"),
@@ -168,7 +169,7 @@ function getBohModel(shift) {
 
 function hydrateActiveShift(shift) {
   if (!shift || typeof shift !== "object") return shift;
-  if (shift.area !== "BOH") return shift;
+  if (shift.area !== "BOH" || Number.isFinite(shift.manualPoints)) return shift;
   const { bohCategory, bohDuration, ...rest } = shift;
   return {
     ...rest,
@@ -502,6 +503,7 @@ function getBohPoints(contribution, shiftSize) {
 }
 
 function calculateShiftPoints(shift) {
+  if (Number.isFinite(shift.manualPoints)) return shift.manualPoints;
   if (shift.area === "FOH") {
     return getFohPoints(shift.fohRole, shift.fohLevel, shift.fohDuration);
   }
@@ -840,6 +842,7 @@ function formatWeekRange(weekStart, weekEnd) {
 }
 
 function getShiftDetail(shift) {
+  if (Number.isFinite(shift.manualPoints)) return "Manual points";
   if (shift.area === "FOH") {
     return `${shift.fohRole}, ${capitalize(shift.fohLevel)}, ${shift.fohDuration === "over" ? "Over 7h" : "Under 7h"}`;
   }
@@ -1067,6 +1070,7 @@ function getBuilderDayDraft(row) {
 }
 
 function getComparableShiftKey(shift) {
+  if (Number.isFinite(shift.manualPoints)) return [shift.staffId, shift.date, shift.area, "manual", shift.manualPoints].join("|");
   const bohModel = shift.area === "BOH" ? getBohModel(shift) : {};
   const roleOrContribution = shift.area === "FOH" ? shift.fohRole : bohModel.bohContribution;
   const level = shift.area === "FOH" ? shift.fohLevel : "";
@@ -1075,6 +1079,7 @@ function getComparableShiftKey(shift) {
 }
 
 function getShiftDescription(shift) {
+  if (Number.isFinite(shift.manualPoints)) return `${shift.area} manual points (${shift.manualPoints})`;
   const bohModel = shift.area === "BOH" ? getBohModel(shift) : {};
   return shift.area === "FOH"
     ? `${shift.area} ${shift.fohRole}, ${capitalize(shift.fohLevel)}, ${shift.fohDuration === "over" ? "Over 7h" : "Under 7h"}`
@@ -1157,6 +1162,13 @@ function updateShiftEditRow(row) {
 }
 
 function renderShiftEditForm(shift) {
+  if (Number.isFinite(shift.manualPoints)) {
+    return `<form class="shift-edit-form" data-shift-edit-form="${escapeHtml(shift.id)}">
+      <strong>${escapeHtml(getStaffName(shift.staffId))} · ${shift.area} · ${formatShiftDate(shift.date)}</strong>
+      <label>Manual points<input type="number" data-manual-points value="${shift.manualPoints}" min="0" step="0.01" required></label>
+      <div class="shift-actions"><button type="submit">Save</button><button type="button" data-shift-cancel="${escapeHtml(shift.id)}">Cancel</button></div>
+    </form>`;
+  }
   const sunday = toDateInput(addDays(state.selectedWeekStart, 6));
   const isFoh = shift.area === "FOH";
   const bohModel = getBohModel(shift);
@@ -1274,6 +1286,7 @@ function createShiftCopyForCurrentWeek(shift, sourceWeekStart) {
   return hydrateActiveShift({
     id: uid("shift"),
     date: toDateInput(addDays(state.selectedWeekStart, dayOffset)),
+    ...(Number.isFinite(shift.manualPoints) ? { manualPoints: shift.manualPoints } : {}),
     staffId: shift.staffId,
     area: shift.area,
     fohRole: shift.fohRole || "Manager",
@@ -1390,7 +1403,7 @@ function render() {
   elements.heroTotalTips.textContent = moneyFromCents(calc.totalTipsCents);
   elements.heroSplit.textContent = `FOH ${week.fohSplit}% / BOH ${week.bohSplit}%`;
 
-  renderDailyTips(week, calc);
+  renderWeeklySheet(week, calc);
   renderStaff();
   renderShiftForm();
   renderBuilderForm();
@@ -1401,31 +1414,94 @@ function render() {
   saveState();
 }
 
-function renderDailyTips(week, calc) {
-  elements.dailyTipsBody.innerHTML = week.dailyTips
-    .map((day) => {
-      const allocation = calc.dailyAllocations.find((dailyAllocation) => dailyAllocation.date === day.date);
-      return `
-        <tr>
-          <td>
-            <strong>${escapeHtml(day.weekday)}</strong>
-            <span class="subtle-date">${formatShiftDate(day.date)}</span>
-          </td>
-          <td>
-            <input type="number" min="0" step="0.01" inputmode="decimal" value="${day.cardTips || ""}" data-daily-tip-date="${day.date}" data-daily-tip-type="cardTips" aria-label="${escapeHtml(day.weekday)} Card/Tyro tips" />
-          </td>
-          <td>
-            <input type="number" min="0" step="0.01" inputmode="decimal" value="${day.cashTips || ""}" data-daily-tip-date="${day.date}" data-daily-tip-type="cashTips" aria-label="${escapeHtml(day.weekday)} cash tips" />
-          </td>
-          <td><strong data-daily-total="${day.date}">${moneyFromCents(allocation?.totalTipsCents || 0)}</strong></td>
-        </tr>
-      `;
-    })
-    .join("");
+function renderWeeklySheet(week, calc) {
+  const days = week.dailyTips;
+  const dayCells = (makeCell) => days.map((day) => `<td>${makeCell(day)}</td>`).join("");
+  const rows = [];
+  elements.sheetDays.innerHTML = '<th scope="col">Staff / tips</th>' +
+    days.map((day) => `<th scope="col">${escapeHtml(day.weekday.slice(0, 3))}<small>${formatShiftDate(day.date)}</small></th>`).join("") +
+    '<th scope="col">Week</th>';
+  for (const [key, label] of [["cardTips", "Card / Tyro"], ["cashTips", "Cash"]]) {
+    rows.push(`<tr><th scope="row">${label}</th>${dayCells((day) =>
+      `<input type="number" min="0" step="0.01" inputmode="decimal" data-date="${day.date}" data-tip="${key}"
+         aria-label="${day.weekday} ${label} tips" value="${day[key] || ""}">`)}<td data-week-tip="${key}"></td></tr>`);
+  }
+  rows.push(`<tr class="sheet-total"><th scope="row">Tips collected</th>${dayCells((day) =>
+    `<output data-collected="${day.date}"></output>`)}<td data-week-tip="totalTips"></td></tr>`);
 
-  const showReviewNotice = week.dailyTipsMigratedFromWeekly === true;
-  elements.dailyTipsNotice.classList.toggle("hidden", !showReviewNotice);
+  const roster = [...state.staff].sort((a, b) => a.name.localeCompare(b.name));
+  for (const area of STAFF_AREAS) {
+    const areaShifts = week.shifts.filter((shift) => shift.area === area);
+    const people = roster.filter((person) => (person.active && getStaffAreas(person).includes(area)) ||
+      areaShifts.some((shift) => shift.staffId === person.id));
+    if (!people.length) continue;
+    rows.push(`<tr class="sheet-band"><th colspan="9">${area} points <span>Weekly ${area} payout at right</span></th></tr>`);
+    for (const person of people) {
+      const id = escapeHtml(person.id);
+      const cells = dayCells((day) => {
+        const shifts = areaShifts.filter((shift) => shift.staffId === person.id && shift.date === day.date);
+        if (!shifts.length && (!person.active || !getStaffAreas(person).includes(area))) return "—";
+        if (shifts.length > 1) {
+          const points = shifts.reduce((sum, shift) => sum + calculateShiftPoints(shift), 0);
+          return `<a href="#details" title="Edit individual shifts in Details">${points} pts · ${shifts.length} shifts</a>`;
+        }
+        const points = shifts.length ? calculateShiftPoints(shifts[0]) : "";
+        return `<input type="number" min="0" step="0.01" inputmode="decimal" value="${points}"
+          aria-label="${escapeHtml(person.name)} ${area} points ${day.weekday}" data-staff="${id}" data-area="${area}" data-date="${day.date}">`;
+      });
+      rows.push(`<tr><th scope="row">${escapeHtml(person.name)}</th>${cells}<td data-payout="${id}" data-area="${area}"></td></tr>`);
+    }
+  }
+  if (!roster.some((person) => person.active)) {
+    rows.push('<tr><td colspan="9"><a href="#staff">Add or activate staff</a> to enter their daily points.</td></tr>');
+  }
+  rows.push(`<tr class="sheet-total"><th scope="row">Allocated</th>${dayCells((day) =>
+    `<output data-allocated="${day.date}"></output>`)}<td data-week-allocated></td></tr>`);
+  elements.dailyTipsBody.innerHTML = rows.join("");
+  updateSheetTotals(calc);
+  elements.dailyTipsNotice.classList.toggle("hidden", !week.dailyTipsMigratedFromWeekly);
   elements.dailyTipsReviewed.checked = week.dailyTipsReviewed === true;
+}
+
+function updateSheetTotals(calc) {
+  const body = elements.dailyTipsBody;
+  for (const day of calc.dailyAllocations) {
+    body.querySelector(`[data-collected="${day.date}"]`).textContent = moneyFromCents(day.totalTipsCents);
+    const allocated = getPayoutCentsSummary(day.staffPayouts).total;
+    const cell = body.querySelector(`[data-allocated="${day.date}"]`);
+    const missing = day.totalTipsCents - allocated;
+    cell.textContent = moneyFromCents(allocated) + (missing ? ` · ${moneyFromCents(missing)} left` : "");
+    cell.classList.toggle("sheet-short", missing > 0);
+  }
+  body.querySelectorAll("[data-week-tip]").forEach((cell) => {
+    cell.textContent = moneyFromCents(calc[cell.dataset.weekTip + "Cents"]);
+  });
+  const payouts = new Map(calc.staffRows.map((row) => [row.staffId, row]));
+  body.querySelectorAll("[data-payout]").forEach((cell) => {
+    const row = payouts.get(cell.dataset.payout);
+    cell.textContent = moneyFromCents(row?.[cell.dataset.area.toLowerCase() + "PayoutCents"] || 0);
+  });
+  body.querySelector("[data-week-allocated]").textContent = moneyFromCents(getPayoutCentsSummary(calc.staffRows).total);
+}
+
+function saveSheetCell(field) {
+  const { date, tip, staff: staffId, area } = field.dataset;
+  const week = getCurrentWeek();
+  if (tip) {
+    week.dailyTips.find((day) => day.date === date)[tip] = Number(field.value);
+  } else {
+    const shift = week.shifts.find((item) => item.date === date && item.staffId === staffId && item.area === area);
+    const points = field.valueAsNumber;
+    if (field.value === "") {
+      if (shift) week.shifts = week.shifts.filter((item) => item.id !== shift.id);
+    } else if (!shift) {
+      week.shifts.push({ id: uid("shift"), date, staffId, area, manualPoints: points });
+    } else if (points !== calculateShiftPoints(shift)) {
+      shift.manualPoints = points;
+    }
+    renderShifts();
+  }
+  renderCalculatedMoney();
 }
 
 function getStaffInitials(name) {
@@ -1971,27 +2047,9 @@ function renderCalculatedMoney() {
   week.cashTips = centsToDollars(weeklyTotals.cashTipsCents);
   elements.heroTotalTips.textContent = moneyFromCents(calc.totalTipsCents);
   elements.heroSplit.textContent = `FOH ${week.fohSplit}% / BOH ${week.bohSplit}%`;
-  calc.dailyAllocations.forEach((day) => {
-    const totalElement = document.querySelector(`[data-daily-total="${day.date}"]`);
-    if (totalElement) totalElement.textContent = moneyFromCents(day.totalTipsCents);
-  });
+  updateSheetTotals(calc);
   renderSummary(calc);
   saveState();
-}
-
-function updateDailyTipValue(date, key, field) {
-  const week = getCurrentWeek();
-  const day = week.dailyTips.find((dailyTip) => dailyTip.date === date);
-  if (!day) return;
-  const rawValue = field.value.trim();
-  const numericValue = Number(field.value);
-  if (rawValue.startsWith("-") || numericValue < 0) {
-    field.value = "0";
-    day[key] = 0;
-  } else {
-    day[key] = Number.isFinite(numericValue) ? numericValue : 0;
-  }
-  renderCalculatedMoney();
 }
 
 function updateSplit(changedKey, value) {
@@ -2042,11 +2100,33 @@ function startOrSelectWeek() {
 
 elements.startSelectWeek.addEventListener("click", startOrSelectWeek);
 
-elements.dailyTipsBody.addEventListener("input", (event) => {
-  const date = event.target.dataset.dailyTipDate;
-  const type = event.target.dataset.dailyTipType;
-  if (!date || !type) return;
-  updateDailyTipValue(date, type, event.target);
+elements.dailyTipsBody.addEventListener("input", ({ target }) => {
+  if (target.matches("input[data-date]") && target.validity.valid) saveSheetCell(target);
+});
+
+// A partial number or an amount with excess decimal places must never look saved.
+elements.dailyTipsBody.addEventListener("focusout", ({ target }) => {
+  if (!target.matches("input[data-date]") || target.validity.valid) return;
+  const { date, tip, staff: staffId, area } = target.dataset;
+  const week = getCurrentWeek();
+  const shift = week.shifts.find((item) => item.date === date && item.area === area && item.staffId === staffId);
+  target.value = tip ? week.dailyTips.find((day) => day.date === date)[tip] || "" : shift ? calculateShiftPoints(shift) : "";
+  showToast("Use a positive number or zero, with up to two decimal places.");
+});
+
+elements.dailyTipsBody.addEventListener("keydown", (event) => {
+  const field = event.target;
+  if (event.key !== "Enter" || !field.matches("input[data-date]")) return;
+  event.preventDefault();
+  if (!field.reportValidity()) return;
+  const column = [...elements.dailyTipsBody.querySelectorAll(`input[data-date="${field.dataset.date}"]`)];
+  const next = column[column.indexOf(field) + (event.shiftKey ? -1 : 1)];
+  if (next) {
+    next.focus();
+    next.select();
+  } else {
+    field.blur();
+  }
 });
 
 elements.dailyTipsReviewed.addEventListener("change", () => {
@@ -2284,17 +2364,16 @@ elements.shiftList.addEventListener("submit", (event) => {
   const shift = week.shifts.find((currentShift) => currentShift.id === shiftId);
   if (!shift) return;
 
-  const nextShift = {
-    ...shift,
-    ...getShiftDraftFromEditRow(row),
-  };
+  const points = row.querySelector("[data-manual-points]");
+  const nextShift = points ? { ...shift, manualPoints: points.valueAsNumber } : { ...shift, ...getShiftDraftFromEditRow(row) };
   const validationMessage = validateShiftForSave(nextShift, shiftId);
   if (validationMessage) {
     showToast(validationMessage);
     return;
   }
 
-  Object.assign(shift, nextShift);
+  const current = getCurrentWeek();
+  current.shifts = current.shifts.map((item) => item.id === shiftId ? nextShift : item);
   editingShiftId = "";
   showToast("Shift updated");
   render();
@@ -2302,7 +2381,7 @@ elements.shiftList.addEventListener("submit", (event) => {
 
 elements.shiftList.addEventListener("change", (event) => {
   const row = event.target.closest("[data-shift-edit-form]");
-  if (row) updateShiftEditRow(row);
+  if (row && !row.querySelector("[data-manual-points]")) updateShiftEditRow(row);
 });
 
 elements.copyPreviousWeekShifts.addEventListener("click", copyPreviousWeekShifts);
@@ -2610,14 +2689,15 @@ function exportExcel(record) {
   rows.push(["Detailed shifts"]);
   rows.push(["Date", "Staff", "Area", "Role/contribution", "High/low", "Duration/shift size", "Points"]);
   record.shifts.forEach((shift) => {
+    const manual = Number.isFinite(shift.manualPoints);
     const bohModel = shift.area === "BOH" ? getBohModel(shift) : {};
     rows.push([
       shift.date,
       shift.staffName || getStaffName(shift.staffId),
       shift.area,
-      shift.area === "FOH" ? shift.fohRole : bohModel.bohContribution,
-      shift.area === "FOH" ? capitalize(shift.fohLevel) : "",
-      shift.area === "FOH" ? (shift.fohDuration === "over" ? "Over 7h" : "Under 7h") : capitalize(bohModel.bohShiftSize),
+      manual ? "Manual points" : shift.area === "FOH" ? shift.fohRole : bohModel.bohContribution,
+      !manual && shift.area === "FOH" ? capitalize(shift.fohLevel) : "",
+      manual ? "" : shift.area === "FOH" ? (shift.fohDuration === "over" ? "Over 7h" : "Under 7h") : capitalize(bohModel.bohShiftSize),
       Number.isFinite(shift.points) ? shift.points : calculateShiftPoints(shift),
     ]);
   });

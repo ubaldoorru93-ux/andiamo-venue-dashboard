@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Andiamo Tip Distribution</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=weekly-sheet-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -17,7 +17,7 @@
           <a class="nav-item" href="operations-hub.html">Operations Hub 🔒</a>
           <a class="nav-item" href="labour-planner.html">Labour Check 🔒</a>
           <a class="nav-item" href="beverage-ordering.html">Beverage Ordering</a>
-          <a class="nav-item active" href="#weekly">Weekly Setup</a>
+          <a class="nav-item active" href="#weekly">Weekly Sheet</a>
           <a class="nav-item" href="#staff">Staff</a>
           <a class="nav-item" href="#shifts">Shifts</a>
           <a class="nav-item" href="#weekly-shift-builder">Shift Builder</a>
@@ -77,8 +77,7 @@
         <section id="weekly" class="panel">
           <div class="panel-header">
             <div>
-              <p class="eyebrow">Step 1</p>
-              <h3>Weekly Setup</h3>
+              <h3>Weekly Tip Sheet</h3>
             </div>
           </div>
 
@@ -108,20 +107,14 @@
               </label>
             </div>
 
-            <div class="table-wrap daily-tips-wrap">
-              <table class="daily-tips-table">
-                <thead>
-                  <tr>
-                    <th>Day</th>
-                    <th>Card/Tyro tips</th>
-                    <th>Cash tips</th>
-                    <th>Daily total</th>
-                  </tr>
-                </thead>
-                <tbody id="dailyTipsBody"></tbody>
-              </table>
-            </div>
           </form>
+          <p class="sheet-help">Enter each day from the paper sheet. Leave points blank for staff who didn’t work. Press Enter to move down the day.</p>
+          <div class="sheet-scroll" role="region" aria-label="Weekly tips and staff points" tabindex="0">
+            <table class="weekly-sheet">
+              <thead><tr id="sheetDays"></tr></thead>
+              <tbody id="dailyTipsBody"></tbody>
+            </table>
+          </div>
         </section>
 
         <section class="content-grid">
@@ -461,6 +454,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260714-boh-contribution"></script>
+    <script src="app.js?v=weekly-sheet-1"></script>
   </body>
 </html>
